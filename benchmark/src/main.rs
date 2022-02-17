@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 pub mod generator;
 
 use clap::{Arg, Command};
@@ -6,6 +9,7 @@ use accumulator::{CBFAccumulator, NaiveAccumulator, PowerSumAccumulator};
 use generator::LoadGenerator;
 
 fn main() {
+    env_logger::builder().filter_level(log::LevelFilter::Debug).init();
     let matches = Command::new("benchmark")
         .arg(Arg::new("num-logged")
             .help("Number of logged packets.")
@@ -41,9 +45,9 @@ fn main() {
     let p_dropped: f32 = matches.value_of("p-dropped").unwrap()
         .parse().unwrap();
     let malicious: bool = matches.is_present("malicious");
-    println!("num_logged = {}", num_logged);
-    println!("p_dropped = {}", p_dropped);
-    println!("malicious = {}", malicious);
+    debug!("num_logged = {}", num_logged);
+    debug!("p_dropped = {}", p_dropped);
+    debug!("malicious = {}", malicious);
 
     let mut accumulator: Box<dyn Accumulator> = {
         match matches.value_of("accumulator").unwrap() {
@@ -57,9 +61,9 @@ fn main() {
     while let Some(elem) = g.next() {
         accumulator.process(elem);
     }
-    println!("dropped {}/{} elements", g.num_dropped, g.num_logged);
+    debug!("dropped {}/{} elements", g.num_dropped, g.num_logged);
 
     // Validate the log against the accumulator.
     let valid = accumulator.validate(&g.log);
-    println!("valid? {} (expected {})", valid, !malicious);
+    info!("valid? {} (expected {})", valid, !malicious);
 }
