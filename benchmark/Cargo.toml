@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 clap = "3.1.0"
+accumulator = { path = "../accumulator" }
+rand = "0.8.5"
