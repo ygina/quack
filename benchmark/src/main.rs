@@ -3,6 +3,7 @@ extern crate log;
 
 pub mod generator;
 
+use std::time::Instant;
 use clap::{Arg, Command};
 use accumulator::Accumulator;
 use accumulator::{CBFAccumulator, NaiveAccumulator, PowerSumAccumulator};
@@ -58,12 +59,22 @@ fn main() {
         }
     };
     let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
+    let t1 = Instant::now();
     while let Some(elem) = g.next() {
         accumulator.process(elem);
     }
+    let t2 = Instant::now();
     debug!("dropped {}/{} elements", g.num_dropped, g.num_logged);
+    info!("processed {} elements in {:?}",
+        g.num_logged - g.num_dropped, t2 - t1);
 
     // Validate the log against the accumulator.
     let valid = accumulator.validate(&g.log);
-    info!("valid? {} (expected {})", valid, !malicious);
+    let t3 = Instant::now();
+    info!("validation took {:?}", t3 - t2);
+    if valid == !malicious {
+        info!("validation is correct ({})", valid);
+    } else {
+        error!("validation failed, expected {}", !malicious);
+    }
 }
