@@ -19,3 +19,73 @@ pub trait Accumulator {
     /// processed are a subset of the provided list of elements.
     fn validate(&self, elems: &Vec<u32>) -> bool;
 }
+
+#[cfg(test)]
+mod tests {
+    use rand;
+    use rand::Rng;
+    use super::*;
+
+    const MALICIOUS_ELEM: u32 = std::u32::MAX;
+
+    fn base_accumulator_test(
+        num_logged: usize,
+        num_dropped: usize,
+        malicious: bool,
+    ) {
+        let mut rng = rand::thread_rng();
+        let elems: Vec<u32> = (0..num_logged)
+            .map(|_| rng.gen_range(0..MALICIOUS_ELEM)).collect();
+        // indexes may be repeated but it's close enough
+        let dropped_is: Vec<usize> = (0..num_dropped)
+            .map(|_| rng.gen_range(0..num_logged)).collect();
+        let malicious_i: usize = rng.gen_range(0..num_logged);
+        let mut accumulator = NaiveAccumulator::new();
+        for i in 0..elems.len() {
+            if malicious && malicious_i == i {
+                accumulator.process(MALICIOUS_ELEM);
+            } else if !dropped_is.contains(&i) {
+                accumulator.process(elems[i]);
+            }
+        }
+        let valid = accumulator.validate(&elems);
+        assert_eq!(valid, !malicious);
+    }
+
+    #[test]
+    fn naive_none_dropped() {
+        base_accumulator_test(100, 0, false);
+    }
+
+    #[test]
+    fn naive_one_dropped() {
+        base_accumulator_test(100, 1, false);
+    }
+
+    #[test]
+    fn naive_two_dropped() {
+        base_accumulator_test(100, 2, false);
+    }
+
+    #[test]
+    fn naive_three_dropped() {
+        base_accumulator_test(100, 3, false);
+    }
+
+    #[test]
+    fn naive_one_malicious_and_none_dropped() {
+        base_accumulator_test(100, 0, true);
+    }
+
+    #[test]
+    fn naive_one_malicious_and_one_dropped() {
+        base_accumulator_test(100, 1, true);
+    }
+
+    #[test]
+    fn naive_one_malicious_and_many_dropped() {
+        // validation takes much longer to fail because many
+        // combinations must be tried and they all fail
+        base_accumulator_test(100, 3, true);
+    }
+}
