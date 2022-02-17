@@ -29,6 +29,7 @@ mod tests {
     const MALICIOUS_ELEM: u32 = std::u32::MAX;
 
     fn base_accumulator_test(
+        mut accumulator: Box<dyn Accumulator>,
         num_logged: usize,
         num_dropped: usize,
         malicious: bool,
@@ -40,7 +41,6 @@ mod tests {
         let dropped_is: Vec<usize> = (0..num_dropped)
             .map(|_| rng.gen_range(0..num_logged)).collect();
         let malicious_i: usize = rng.gen_range(0..num_logged);
-        let mut accumulator = NaiveAccumulator::new();
         for i in 0..elems.len() {
             if malicious && malicious_i == i {
                 accumulator.process(MALICIOUS_ELEM);
@@ -54,38 +54,89 @@ mod tests {
 
     #[test]
     fn naive_none_dropped() {
-        base_accumulator_test(100, 0, false);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 0, false);
     }
 
     #[test]
     fn naive_one_dropped() {
-        base_accumulator_test(100, 1, false);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 1, false);
     }
 
     #[test]
     fn naive_two_dropped() {
-        base_accumulator_test(100, 2, false);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 2, false);
     }
 
     #[test]
     fn naive_three_dropped() {
-        base_accumulator_test(100, 3, false);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 3, false);
     }
 
     #[test]
     fn naive_one_malicious_and_none_dropped() {
-        base_accumulator_test(100, 0, true);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 0, true);
     }
 
     #[test]
     fn naive_one_malicious_and_one_dropped() {
-        base_accumulator_test(100, 1, true);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 1, true);
     }
 
     #[test]
     fn naive_one_malicious_and_many_dropped() {
         // validation takes much longer to fail because many
         // combinations must be tried and they all fail
-        base_accumulator_test(100, 3, true);
+        let mut accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 3, true);
+    }
+
+    #[test]
+    fn power_sum_none_dropped() {
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, false);
+    }
+
+    #[test]
+    fn power_sum_one_dropped() {
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 1, false);
+    }
+
+    #[test]
+    fn power_sum_two_dropped() {
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 2, false);
+    }
+
+    #[test]
+    fn power_sum_three_dropped() {
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 3, false);
+    }
+
+    #[test]
+    fn power_sum_one_malicious_and_none_dropped() {
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, true);
+    }
+
+    #[test]
+    fn power_sum_one_malicious_and_one_dropped() {
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 1, true);
+    }
+
+    #[test]
+    fn power_sum_one_malicious_and_many_dropped() {
+        // validation takes much longer to fail because many
+        // combinations must be tried and they all fail
+        let mut accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 3, true);
     }
 }

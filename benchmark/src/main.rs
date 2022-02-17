@@ -30,6 +30,13 @@ fn main() {
                 and the logged packet at that index is randomly set \
                 and definitely not dropped.")
             .long("malicious"))
+        .arg(Arg::new("threshold")
+            .help("Threshold number of log packets for the CBF \
+                and power sum accumulators.")
+            .short('t')
+            .long("threshold")
+            .takes_value(true)
+            .default_value("1000"))
         .arg(Arg::new("accumulator")
             .help("")
             .short('a')
@@ -51,10 +58,12 @@ fn main() {
     debug!("malicious = {}", malicious);
 
     let mut accumulator: Box<dyn Accumulator> = {
+        let threshold: usize = matches.value_of("threshold").unwrap()
+            .parse().unwrap();
         match matches.value_of("accumulator").unwrap() {
             "naive" => Box::new(NaiveAccumulator::new()),
             "cbf" => Box::new(CBFAccumulator::new()),
-            "power_sum" => Box::new(PowerSumAccumulator::new()),
+            "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
             _ => unreachable!(),
         }
     };
