@@ -139,4 +139,48 @@ mod tests {
         let mut accumulator = PowerSumAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 100, 3, true);
     }
+
+    #[test]
+    fn cbf_none_dropped() {
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, false);
+    }
+
+    #[test]
+    fn cbf_one_dropped() {
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 1, false);
+    }
+
+    #[test]
+    fn cbf_two_dropped() {
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 2, false);
+    }
+
+    #[test]
+    fn cbf_three_dropped() {
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 3, false);
+    }
+
+    #[test]
+    fn cbf_one_malicious_and_none_dropped() {
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, true);
+    }
+
+    #[test]
+    fn cbf_one_malicious_and_one_dropped() {
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 1, true);
+    }
+
+    #[test]
+    fn cbf_one_malicious_and_many_dropped() {
+        // validation is much faster compared to the naive approach,
+        // so we increase the number of packets
+        let mut accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 1000, 10, true);
+    }
 }

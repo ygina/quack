@@ -1,14 +1,9 @@
 [package]
-name = "accumulator"
+name = "bloom-sd"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bloom-sd = { path = "../bloom-sd" }
-digest = { path = "../digest" }
-itertools = "0.10.3"
-
-[dev-dependencies]
-rand = "0.8.5"
+bloom = "0.3.2"

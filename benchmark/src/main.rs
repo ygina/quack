@@ -62,7 +62,7 @@ fn main() {
             .parse().unwrap();
         match matches.value_of("accumulator").unwrap() {
             "naive" => Box::new(NaiveAccumulator::new()),
-            "cbf" => Box::new(CBFAccumulator::new()),
+            "cbf" => Box::new(CBFAccumulator::new(threshold)),
             "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
             _ => unreachable!(),
         }
