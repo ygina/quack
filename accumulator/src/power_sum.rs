@@ -27,6 +27,14 @@ pub struct PowerSumAccumulator {
     power_sums: Vec<i64>,
 }
 
+extern "C" {
+    fn compute_polynomial_coefficients_wrapper(
+        coeffs: *mut i64,
+        power_sums: *const i64,
+        n_values: usize,
+    );
+}
+
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
 fn mul_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     let mut res = 0;
@@ -109,6 +117,14 @@ impl Accumulator for PowerSumAccumulator {
             *count += 1;
         }
 
+        let mut coeffs: Vec<i64> = (0..n_values).map(|_| 0).collect();
+        unsafe {
+            compute_polynomial_coefficients_wrapper(
+                coeffs.as_mut_ptr(),
+                power_sums_diff.as_ptr(),
+                n_values,
+            );
+        }
         unimplemented!("solve the system of equations");
         // let solutions: Vec<u32> = vec![];
         // for solution in solutions {
@@ -119,5 +135,50 @@ impl Accumulator for PowerSumAccumulator {
         //     *count -= 1;
         // }
         // true
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_mul_and_mod() {
+        assert_eq!(mul_and_mod(2, 3, 10), 6);
+        assert_eq!(mul_and_mod(2, 4, 10), 8);
+        assert_eq!(mul_and_mod(2, 3, 5), 1);
+        assert_eq!(mul_and_mod(2, 4, 5), 3);
+    }
+
+    #[test]
+    fn test_compute_polynomial_coefficients_small_numbers() {
+        // x = 2,3,5
+        // power_sums = sum(x), sum(x^2), sum(x^3)
+        let mut coeffs: Vec<i64> = vec![0, 0, 0];
+        let power_sums: Vec<i64> = vec![10, 38, 160];
+        unsafe {
+            compute_polynomial_coefficients_wrapper(
+                coeffs.as_mut_ptr(),
+                power_sums.as_ptr(),
+                power_sums.len(),
+            );
+        }
+        assert_eq!(coeffs, vec![-10, 31, -30]);
+    }
+
+    #[test]
+    fn test_compute_polynomial_coefficients_large_numbers() {
+        // x = 4294966796, 3987231002
+        // power_sums = sum(x) % 51539607551, sum(x^2) % 51539607551
+        let mut coeffs: Vec<i64> = vec![0, 0];
+        let power_sums: Vec<i64> = vec![8282197798, 20796235250];
+        unsafe {
+            compute_polynomial_coefficients_wrapper(
+                coeffs.as_mut_ptr(),
+                power_sums.as_ptr(),
+                power_sums.len(),
+            );
+        }
+        assert_eq!(coeffs, vec![-8282197798, 25351397331]);
     }
 }

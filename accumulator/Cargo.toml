@@ -12,3 +12,6 @@ itertools = "0.10.3"
 
 [dev-dependencies]
 rand = "0.8.5"
+
+[build-dependencies]
+cc = "1.0.73"
