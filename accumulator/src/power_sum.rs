@@ -5,7 +5,7 @@ use digest::XorDigest;
 /// I picked some random prime number in the range [2^32, 2^64] from
 /// https://en.wikipedia.org/wiki/List_of_prime_numbers.
 /// This one is a Thabit prime, which is not of significance.
-const LARGE_PRIME: u64 = 51539607551;
+const LARGE_PRIME: i64 = 51539607551;
 
 /// The power sum accumulator stores the power sums of all processed elements
 /// up to the threshold number of lost elements.
@@ -24,11 +24,11 @@ const LARGE_PRIME: u64 = 51539607551;
 pub struct PowerSumAccumulator {
     digest: XorDigest,
     num_elems: usize,
-    power_sums: Vec<u64>,
+    power_sums: Vec<i64>,
 }
 
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
-fn mul_and_mod(mut a: u64, mut b: u64, modulo: u64) -> u64 {
+fn mul_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     let mut res = 0;
     while b > 0 {
         if (b & 1) == 1 {
@@ -54,9 +54,9 @@ impl Accumulator for PowerSumAccumulator {
     fn process(&mut self, elem: u32) {
         self.digest.add(elem);
         self.num_elems += 1;
-        let mut value: u64 = 1;
+        let mut value: i64 = 1;
         for i in 0..self.power_sums.len() {
-            value = mul_and_mod(value, elem as u64, LARGE_PRIME);
+            value = mul_and_mod(value, elem as i64, LARGE_PRIME);
             self.power_sums[i] = (self.power_sums[i] + value) % LARGE_PRIME;
         }
     }
@@ -81,12 +81,12 @@ impl Accumulator for PowerSumAccumulator {
 
         // Calculate the power sums of the given list of elements
         let power_sums = {
-            let mut power_sums: Vec<u64> =
+            let mut power_sums: Vec<i64> =
                 (0..threshold).map(|_| 0).collect();
             for &elem in elems {
                 let mut value = 1;
                 for i in 0..power_sums.len() {
-                    value = mul_and_mod(value, elem as u64, LARGE_PRIME);
+                    value = mul_and_mod(value, elem as i64, LARGE_PRIME);
                     power_sums[i] = (power_sums[i] + value) % LARGE_PRIME;
                 }
             }
@@ -94,7 +94,7 @@ impl Accumulator for PowerSumAccumulator {
         };
 
         // Find the difference with the power sums of the processed elements
-        let power_sums_diff: Vec<u64> = (0..power_sums.len())
+        let power_sums_diff: Vec<i64> = (0..power_sums.len())
             .map(|i| self.power_sums[i] + LARGE_PRIME - power_sums[i])
             .map(|power_sum| power_sum % LARGE_PRIME)
             .collect();
