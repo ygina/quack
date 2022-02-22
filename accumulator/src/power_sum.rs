@@ -72,17 +72,19 @@ impl Accumulator for PowerSumAccumulator {
     }
 
     fn validate(&self, elems: &Vec<u32>) -> bool {
-        // Validation cannot be performed if the number of lost elements
-        // exceeds the threshold.
+        // The number of power sum equations we need is equal to
+        // the number of lost elements. Validation cannot be performed
+        // if this number exceeds the threshold.
+        let n_values = elems.len() - self.total();
         let threshold = self.power_sums.len();
-        if elems.len() - self.total() > threshold {
+        if n_values > threshold {
             panic!("number of lost elements exceeds threshold");
         }
 
         // Calculate the power sums of the given list of elements
         let power_sums = {
             let mut power_sums: Vec<i64> =
-                (0..threshold).map(|_| 0).collect();
+                (0..n_values).map(|_| 0).collect();
             for &elem in elems {
                 let mut value = 1;
                 for i in 0..power_sums.len() {
