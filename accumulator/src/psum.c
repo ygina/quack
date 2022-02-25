@@ -125,8 +125,18 @@ void compute_polynomial_coefficients_wrapper(
     int64_t *coeffs, const int64_t *power_sums, size_t n_values
 ) {
     mpz_t *coeffs_mpz = malloc(n_values * sizeof(mpz_t));
+    for (size_t i = 0; i < n_values; i++) mpz_init(coeffs_mpz[i]);
     mpz_t *power_sums_mpz = malloc(n_values * sizeof(mpz_t));
-    // TODO
+    for (size_t i = 0; i < n_values; i++) {
+        mpz_init(power_sums_mpz[i]);
+        mpz_set_ui(power_sums_mpz[i], power_sums[i]);
+    };
+    compute_polynomial_coefficients(coeffs_mpz, power_sums_mpz, n_values);
+    for (size_t i = 0; i < n_values; i++) {
+        coeffs[i] = mpz_get_ui(coeffs_mpz[i]);
+    };
+    for (size_t i = 0; i < n_values; i++) mpz_clear(power_sums_mpz[i]);
     free(power_sums_mpz);
+    for (size_t i = 0; i < n_values; i++) mpz_clear(coeffs_mpz[i]);
     free(coeffs_mpz);
 }

@@ -27,6 +27,7 @@ pub struct PowerSumAccumulator {
     power_sums: Vec<i64>,
 }
 
+#[link(name = "gmp", kind = "dylib")]
 extern "C" {
     fn compute_polynomial_coefficients_wrapper(
         coeffs: *mut i64,
