@@ -34,6 +34,12 @@ extern "C" {
         power_sums: *const i64,
         n_values: usize,
     );
+
+    fn find_integer_monic_polynomial_roots_wrapper(
+        roots: *mut i64,
+        coeffs: *mut i64,
+        degree: usize,
+    );
 }
 
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
@@ -81,6 +87,18 @@ fn compute_polynomial_coefficients(power_sums_diff: Vec<i64>) -> Vec<i64> {
     coeffs
 }
 
+fn find_integer_monic_polynomial_roots(mut coeffs: Vec<i64>) -> Vec<i64> {
+    let mut roots: Vec<i64> = vec![0; coeffs.len()];
+    unsafe {
+        find_integer_monic_polynomial_roots_wrapper(
+            roots.as_mut_ptr(),
+            coeffs.as_mut_ptr(),
+            roots.len(),
+        );
+    }
+    roots
+}
+
 impl PowerSumAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
@@ -122,28 +140,33 @@ impl Accumulator for PowerSumAccumulator {
             panic!("number of lost elements exceeds threshold");
         }
 
+        // Calculate the power sums of the given list of elements.
+        // Find the difference with the power sums of the processed elements.
+        // Solve the system of equations.
         let power_sums = calculate_power_sums(elems, n_values);
         let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        let roots = find_integer_monic_polynomial_roots(coeffs);
 
-        // Solve the system of equations, and check that a solution exists
-        // and that the solution is a subset of the element list.
+        // Check that a solution exists and that the solution is a subset of
+        // the element list.
         let mut elem_count: HashMap<u32, usize> = HashMap::new();
         for &elem in elems {
             let count = elem_count.entry(elem).or_insert(0);
             *count += 1;
         }
-
-        unimplemented!("solve the system of equations");
-        // let solutions: Vec<u32> = vec![];
-        // for solution in solutions {
-        //     let count = elem_count.entry(solution).or_insert(0);
-        //     if *count == 0 {
-        //         return false;
-        //     }
-        //     *count -= 1;
-        // }
-        // true
+        for root in roots {
+            let root = u32::try_from(root);
+            if root.is_err() {
+                return false;
+            }
+            let count = elem_count.entry(root.unwrap()).or_insert(0);
+            if *count == 0 {
+                return false;
+            }
+            *count -= 1;
+        }
+        true
     }
 }
 
@@ -197,5 +220,26 @@ mod test {
         let e1 = (x[0] as i64) + (x[1] as i64) % LARGE_PRIME;
         let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME);
         assert_eq!(coeffs, vec![-e1, e2]);
+    }
+
+    #[test]
+    fn test_find_integer_monic_polynomial_roots_small_numbers() {
+        let x = vec![2, 3, 5];
+        let power_sums_diff = calculate_power_sums(&x, x.len());
+        let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        let mut roots = find_integer_monic_polynomial_roots(coeffs);
+        roots.sort();
+        assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
+    }
+
+    #[ignore]
+    #[test]
+    fn test_find_integer_monic_polynomial_roots_large_numbers() {
+        let x = vec![4294966796, 3987231002];
+        let power_sums_diff = calculate_power_sums(&x, x.len());
+        let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        let mut roots = find_integer_monic_polynomial_roots(coeffs);
+        roots.sort();
+        assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
     }
 }

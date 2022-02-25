@@ -140,3 +140,23 @@ void compute_polynomial_coefficients_wrapper(
     for (size_t i = 0; i < n_values; i++) mpz_clear(coeffs_mpz[i]);
     free(coeffs_mpz);
 }
+
+void find_integer_monic_polynomial_roots_wrapper(
+    int64_t *roots, int64_t *coeffs, size_t degree
+) {
+    mpz_t *roots_mpz = malloc(degree * sizeof(mpz_t));
+    for (size_t i = 0; i < degree; i++) mpz_init(roots_mpz[i]);
+    mpz_t *coeffs_mpz = malloc(degree * sizeof(mpz_t));
+    for (size_t i = 0; i < degree; i++) {
+        mpz_init(coeffs_mpz[i]);
+        mpz_set_ui(coeffs_mpz[i], coeffs[i]);
+    };
+    find_integer_monic_polynomial_roots(roots_mpz, coeffs_mpz, degree);
+    for (size_t i = 0; i < degree; i++) {
+        roots[i] = mpz_get_ui(roots_mpz[i]);
+    };
+    for (size_t i = 0; i < degree; i++) mpz_clear(coeffs_mpz[i]);
+    free(coeffs_mpz);
+    for (size_t i = 0; i < degree; i++) mpz_clear(roots_mpz[i]);
+    free(roots_mpz);
+}
