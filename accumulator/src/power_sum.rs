@@ -56,6 +56,53 @@ fn mul_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     res
 }
 
+// modular division
+fn div_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
+    // divide `a` and `b` by the GCD of `a` and `modulo`
+    let gcd = {
+        let (mut x, mut y) = if a < b {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        loop {
+            let remainder = y - x * (y / x);
+            if remainder == 0 {
+                break x;
+            }
+            y = x;
+            x = remainder;
+        }
+    };
+    a /= gcd;
+    b /= gcd;
+    if b == 1 {
+        return a;
+    }
+
+    // find the modular multiplicative inverse of b mod modulo
+    // ax + by = gcd(a, b)
+    let mmi = {
+        let (mut old_r, mut r) = (b, modulo);
+        let (mut old_x, mut x) = (1, 0);
+        let (mut old_y, mut y) = (0, 1);
+        while r != 0 {
+            let quotient = old_r / r;
+            (old_r, r) = (r, old_r - quotient * r);
+            (old_x, x) = (x, old_x - quotient * x);
+            (old_y, y) = (y, old_y - quotient * y);
+        }
+        let mut mmi = old_x;
+        while mmi < 0 {
+            mmi += modulo;
+        }
+        mmi
+    };
+
+    // return the divided `a` value multiplied by the MMI in the field
+    mul_and_mod(a, mmi, modulo)
+}
+
 fn calculate_power_sums(elems: &Vec<u32>, n_values: usize) -> Vec<i64> {
     let mut power_sums: Vec<i64> = vec![0; n_values];
     for &elem in elems {
@@ -82,6 +129,7 @@ fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
 // 3*e3 = e2*p0 - e1*p1 + e0*p2
 // 4*e4 = e3*p0 - e2*p1 + e1*p2 - e0*p3
 // ...
+// Returns the coefficients as positive numbers in the field GF(LARGE_PRIME).
 fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
     let n = p.len();
     if n == 0 {
@@ -92,17 +140,21 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
         let mut sum = 0;
         for j in 0..(i+1) {
             if j & 1 == 0 {
-                sum += e[i-j] * p[j];
+                sum += mul_and_mod(e[i-j], p[j], LARGE_PRIME);
             } else {
-                sum -= e[i-j] * p[j];
+                sum -= mul_and_mod(e[i-j], p[j], LARGE_PRIME);
             }
         }
-        e.push(sum / (i as i64 + 1));
+        while sum < 0 {
+            sum += LARGE_PRIME;
+        }
+        e.push(div_and_mod(sum, i as i64 + 1, LARGE_PRIME));
     }
     e.remove(0); // O(n)
     for i in 0..n {
         if i & 1 == 0 {
             e[i] *= -1;
+            e[i] += LARGE_PRIME;
         }
     }
     e
@@ -227,6 +279,13 @@ mod test {
     }
 
     #[test]
+    fn test_div_and_mod() {
+        assert_eq!(div_and_mod(8, 2, 10), 4);
+        assert_eq!(div_and_mod(8, 3, 10), 6); // MMI of 3 mod 10 = 7
+        assert_eq!(div_and_mod(8, 6, 10), 8);
+    }
+
+    #[test]
     fn test_calculate_power_sums() {
         assert_eq!(calculate_power_sums(&vec![2, 3, 5], 2), vec![10, 38]);
         assert_eq!(calculate_power_sums(&vec![2, 3, 5], 3), vec![10, 38, 160]);
@@ -252,7 +311,7 @@ mod test {
         let power_sums_diff = calculate_power_sums(&x, 3);
         assert_eq!(power_sums_diff, vec![10, 38, 160]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        assert_eq!(coeffs, vec![-10, 31, -30]);
+        assert_eq!(coeffs, vec![-10+LARGE_PRIME, 31, -30+LARGE_PRIME]);
     }
 
     #[test]
@@ -263,9 +322,10 @@ mod test {
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let e1 = (x[0] as i64) + (x[1] as i64) % LARGE_PRIME;
         let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME);
-        assert_eq!(coeffs, vec![-e1, e2]);
+        assert_eq!(coeffs, vec![-e1+LARGE_PRIME, e2]);
     }
 
+    #[ignore]
     #[test]
     fn test_find_integer_monic_polynomial_roots_small_numbers() {
         let x = vec![2, 3, 5];
