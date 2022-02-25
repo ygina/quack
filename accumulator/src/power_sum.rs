@@ -75,17 +75,49 @@ fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
         .collect()
 }
 
-fn compute_polynomial_coefficients(power_sums_diff: Vec<i64>) -> Vec<i64> {
-    let n_values = power_sums_diff.len();
-    let mut coeffs: Vec<i64> = vec![0; n_values];
+// https://en.wikipedia.org/wiki/Newton%27s_identities
+//   e0 = 1
+//   e1 = e0*p0
+// 2*e2 = e1*p0 - e0*p1
+// 3*e3 = e2*p0 - e1*p1 + e0*p2
+// 4*e4 = e3*p0 - e2*p1 + e1*p2 - e0*p3
+// ...
+fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
+    let n = p.len();
+    if n == 0 {
+        return vec![];
+    }
+    let mut e: Vec<i64> = vec![1];
+    for i in 0..n {
+        let mut sum = 0;
+        for j in 0..(i+1) {
+            if j & 1 == 0 {
+                sum += e[i-j] * p[j];
+            } else {
+                sum -= e[i-j] * p[j];
+            }
+        }
+        e.push(sum / (i as i64 + 1));
+    }
+    e.remove(0); // O(n)
+    for i in 0..n {
+        if i & 1 == 0 {
+            e[i] *= -1;
+        }
+    }
+    e
+
+    /*
+    let n = p.len();
+    let mut coeffs: Vec<i64> = vec![0; n];
     unsafe {
         compute_polynomial_coefficients_wrapper(
             coeffs.as_mut_ptr(),
-            power_sums_diff.as_ptr(),
-            n_values,
+            p.as_ptr(),
+            n,
         );
     }
-    coeffs
+    */
 }
 
 fn find_integer_monic_polynomial_roots(mut coeffs: Vec<i64>) -> Vec<i64> {
