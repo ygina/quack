@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 use crate::Accumulator;
 use digest::XorDigest;
 
@@ -143,10 +144,19 @@ impl Accumulator for PowerSumAccumulator {
         // Calculate the power sums of the given list of elements.
         // Find the difference with the power sums of the processed elements.
         // Solve the system of equations.
+        let t1 = Instant::now();
         let power_sums = calculate_power_sums(elems, n_values);
+        let t2 = Instant::now();
+        debug!("calculated power sums: {:?}", t2 - t1);
         let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
+        let t3 = Instant::now();
+        debug!("calculated power sum difference: {:?}", t3 - t2);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        let t4 = Instant::now();
+        debug!("computed polynomial coefficients: {:?}", t4 - t3);
         let roots = find_integer_monic_polynomial_roots(coeffs);
+        let t5 = Instant::now();
+        debug!("found integer monic polynomial roots: {:?}", t5 - t4);
 
         // Check that a solution exists and that the solution is a subset of
         // the element list.
@@ -166,6 +176,8 @@ impl Accumulator for PowerSumAccumulator {
             }
             *count -= 1;
         }
+        let t6 = Instant::now();
+        debug!("checked roots against element list: {:?}", t6 - t5);
         true
     }
 }

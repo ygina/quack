@@ -1,3 +1,4 @@
+use std::time::Instant;
 use bloom_sd::CountingBloomFilter;
 use crate::Accumulator;
 use digest::XorDigest;
@@ -52,6 +53,7 @@ impl Accumulator for CBFAccumulator {
     }
 
     fn validate(&self, elems: &Vec<u32>) -> bool {
+        let t1 = Instant::now();
         let mut cbf = self.cbf.empty_clone();
         for &elem in elems {
             cbf.insert(&elem);
@@ -66,6 +68,8 @@ impl Accumulator for CBFAccumulator {
             }
             cbf.counters_mut().set(i, processed_count - received_count)
         }
+        let t2 = Instant::now();
+        debug!("calculated the difference cbf: {:?}", t2 - t1);
 
         // k constants, the size of the CBF
         let v: Vec<usize> = (0..(cbf.num_entries() as usize))

@@ -1,3 +1,4 @@
+use std::time::Instant;
 use itertools::Itertools;
 use crate::Accumulator;
 use digest::XorDigest;
@@ -41,7 +42,9 @@ impl Accumulator for NaiveAccumulator {
     }
 
     fn validate(&self, elems: &Vec<u32>) -> bool {
-        for combination in (0..elems.len()).combinations(self.num_elems) {
+        let start = Instant::now();
+        for (i, combination) in (0..elems.len())
+                .combinations(self.num_elems).enumerate() {
             let mut digest = XorDigest::new();
             // We could amortize digest calculation using the previous digest,
             // but it's still exponential in the number of subsets
@@ -50,6 +53,9 @@ impl Accumulator for NaiveAccumulator {
             }
             if digest == self.digest {
                 return true;
+            }
+            if i % 1000 == 0 && i != 0 {
+                debug!("tried {} combinations: {:?}", i, Instant::now() - start);
             }
         }
         false
