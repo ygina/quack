@@ -48,6 +48,38 @@ fn mul_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     res
 }
 
+fn calculate_power_sums(elems: &Vec<u32>, n_values: usize) -> Vec<i64> {
+    let mut power_sums: Vec<i64> = vec![0; n_values];
+    for &elem in elems {
+        let mut value = 1;
+        for i in 0..power_sums.len() {
+            value = mul_and_mod(value, elem as i64, LARGE_PRIME);
+            power_sums[i] = (power_sums[i] + value) % LARGE_PRIME;
+        }
+    }
+    power_sums
+}
+
+fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
+    (0..lhs.len())
+        .map(|i| lhs[i] + LARGE_PRIME - rhs[i])
+        .map(|power_sum| power_sum % LARGE_PRIME)
+        .collect()
+}
+
+fn compute_polynomial_coefficients(power_sums_diff: Vec<i64>) -> Vec<i64> {
+    let n_values = power_sums_diff.len();
+    let mut coeffs: Vec<i64> = vec![0; n_values];
+    unsafe {
+        compute_polynomial_coefficients_wrapper(
+            coeffs.as_mut_ptr(),
+            power_sums_diff.as_ptr(),
+            n_values,
+        );
+    }
+    coeffs
+}
+
 impl PowerSumAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
@@ -89,25 +121,9 @@ impl Accumulator for PowerSumAccumulator {
             panic!("number of lost elements exceeds threshold");
         }
 
-        // Calculate the power sums of the given list of elements
-        let power_sums = {
-            let mut power_sums: Vec<i64> =
-                (0..n_values).map(|_| 0).collect();
-            for &elem in elems {
-                let mut value = 1;
-                for i in 0..power_sums.len() {
-                    value = mul_and_mod(value, elem as i64, LARGE_PRIME);
-                    power_sums[i] = (power_sums[i] + value) % LARGE_PRIME;
-                }
-            }
-            power_sums
-        };
-
-        // Find the difference with the power sums of the processed elements
-        let power_sums_diff: Vec<i64> = (0..power_sums.len())
-            .map(|i| self.power_sums[i] + LARGE_PRIME - power_sums[i])
-            .map(|power_sum| power_sum % LARGE_PRIME)
-            .collect();
+        let power_sums = calculate_power_sums(elems, n_values);
+        let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
+        let coeffs = compute_polynomial_coefficients(power_sums_diff);
 
         // Solve the system of equations, and check that a solution exists
         // and that the solution is a subset of the element list.
@@ -117,14 +133,6 @@ impl Accumulator for PowerSumAccumulator {
             *count += 1;
         }
 
-        let mut coeffs: Vec<i64> = (0..n_values).map(|_| 0).collect();
-        unsafe {
-            compute_polynomial_coefficients_wrapper(
-                coeffs.as_mut_ptr(),
-                power_sums_diff.as_ptr(),
-                n_values,
-            );
-        }
         unimplemented!("solve the system of equations");
         // let solutions: Vec<u32> = vec![];
         // for solution in solutions {
@@ -151,34 +159,42 @@ mod test {
     }
 
     #[test]
+    fn test_calculate_power_sums() {
+        assert_eq!(calculate_power_sums(&vec![2, 3, 5], 2), vec![10, 38]);
+        assert_eq!(calculate_power_sums(&vec![2, 3, 5], 3), vec![10, 38, 160]);
+        let one_large_num = calculate_power_sums(&vec![4294967295], 3);
+        assert_eq!(one_large_num, vec![4294967295, 8947848534, 17567609286]);
+        let two_large_nums = calculate_power_sums(&vec![4294967295, 2294967295], 3);
+        assert_eq!(two_large_nums, vec![6589934590, 32873368637, 30483778854]);
+    }
+
+    #[test]
+    fn test_calculate_difference() {
+        let diff = calculate_difference(vec![2, 3, 4], &vec![1, 2, 3]);
+        assert_eq!(diff, vec![1, 1, 1]);
+        let diff = calculate_difference(vec![2, 3, 4], &vec![1, 2, 3, 4]);
+        assert_eq!(diff, vec![1, 1, 1]);
+        let overflow_diff = calculate_difference(vec![1], &vec![2]);
+        assert_eq!(overflow_diff, vec![51539607550]);
+    }
+
+    #[test]
     fn test_compute_polynomial_coefficients_small_numbers() {
-        // x = 2,3,5
-        // power_sums = sum(x), sum(x^2), sum(x^3)
-        let mut coeffs: Vec<i64> = vec![0, 0, 0];
-        let power_sums: Vec<i64> = vec![10, 38, 160];
-        unsafe {
-            compute_polynomial_coefficients_wrapper(
-                coeffs.as_mut_ptr(),
-                power_sums.as_ptr(),
-                power_sums.len(),
-            );
-        }
+        let x = vec![2, 3, 5];
+        let power_sums_diff = calculate_power_sums(&x, 3);
+        assert_eq!(power_sums_diff, vec![10, 38, 160]);
+        let coeffs = compute_polynomial_coefficients(power_sums_diff);
         assert_eq!(coeffs, vec![-10, 31, -30]);
     }
 
     #[test]
     fn test_compute_polynomial_coefficients_large_numbers() {
-        // x = 4294966796, 3987231002
-        // power_sums = sum(x) % 51539607551, sum(x^2) % 51539607551
-        let mut coeffs: Vec<i64> = vec![0, 0];
-        let power_sums: Vec<i64> = vec![8282197798, 20796235250];
-        unsafe {
-            compute_polynomial_coefficients_wrapper(
-                coeffs.as_mut_ptr(),
-                power_sums.as_ptr(),
-                power_sums.len(),
-            );
-        }
-        assert_eq!(coeffs, vec![-8282197798, 25351397331]);
+        let x = vec![4294966796, 3987231002];
+        let power_sums_diff = calculate_power_sums(&x, 2);
+        assert_eq!(power_sums_diff, vec![8282197798, 20796235250]);
+        let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        let e1 = (x[0] as i64) + (x[1] as i64) % LARGE_PRIME;
+        let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME);
+        assert_eq!(coeffs, vec![-e1, e2]);
     }
 }
