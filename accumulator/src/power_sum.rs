@@ -29,16 +29,18 @@ pub struct PowerSumAccumulator {
 }
 
 #[link(name = "gmp", kind = "dylib")]
+#[link(name = "pari", kind = "dylib")]
 extern "C" {
-    fn compute_polynomial_coefficients_wrapper(
-        coeffs: *mut i64,
-        power_sums: *const i64,
-        n_values: usize,
-    );
+    // fn compute_polynomial_coefficients_wrapper(
+    //     coeffs: *mut i64,
+    //     power_sums: *const i64,
+    //     n_values: usize,
+    // );
 
-    fn find_integer_monic_polynomial_roots_wrapper(
+    fn find_integer_monic_polynomial_roots_libpari(
         roots: *mut i64,
-        coeffs: *mut i64,
+        coeffs: *const i64,
+        field: i64,
         degree: usize,
     );
 }
@@ -150,13 +152,13 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
         }
         e.push(div_and_mod(sum, i as i64 + 1, LARGE_PRIME));
     }
-    e.remove(0); // O(n)
-    for i in 0..n {
-        if i & 1 == 0 {
+    for i in 0..(n+1) {
+        if i & 1 != 0 {
             e[i] *= -1;
             e[i] += LARGE_PRIME;
         }
     }
+    // includes the leading coefficient
     e
 
     /*
@@ -172,12 +174,13 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
     */
 }
 
-fn find_integer_monic_polynomial_roots(mut coeffs: Vec<i64>) -> Vec<i64> {
-    let mut roots: Vec<i64> = vec![0; coeffs.len()];
+fn find_integer_monic_polynomial_roots(coeffs: Vec<i64>) -> Vec<i64> {
+    let mut roots: Vec<i64> = vec![0; coeffs.len() - 1];
     unsafe {
-        find_integer_monic_polynomial_roots_wrapper(
+        find_integer_monic_polynomial_roots_libpari(
             roots.as_mut_ptr(),
-            coeffs.as_mut_ptr(),
+            coeffs.as_ptr(),
+            LARGE_PRIME,
             roots.len(),
         );
     }
@@ -311,7 +314,7 @@ mod test {
         let power_sums_diff = calculate_power_sums(&x, 3);
         assert_eq!(power_sums_diff, vec![10, 38, 160]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        assert_eq!(coeffs, vec![-10+LARGE_PRIME, 31, -30+LARGE_PRIME]);
+        assert_eq!(coeffs, vec![1, -10+LARGE_PRIME, 31, -30+LARGE_PRIME]);
     }
 
     #[test]
@@ -322,10 +325,9 @@ mod test {
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let e1 = (x[0] as i64) + (x[1] as i64) % LARGE_PRIME;
         let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME);
-        assert_eq!(coeffs, vec![-e1+LARGE_PRIME, e2]);
+        assert_eq!(coeffs, vec![1, -e1+LARGE_PRIME, e2]);
     }
 
-    #[ignore]
     #[test]
     fn test_find_integer_monic_polynomial_roots_small_numbers() {
         let x = vec![2, 3, 5];
@@ -336,10 +338,9 @@ mod test {
         assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
     }
 
-    #[ignore]
     #[test]
     fn test_find_integer_monic_polynomial_roots_large_numbers() {
-        let x = vec![4294966796, 3987231002];
+        let x = vec![3987231002, 4294966796];
         let power_sums_diff = calculate_power_sums(&x, x.len());
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let mut roots = find_integer_monic_polynomial_roots(coeffs);
