@@ -222,6 +222,10 @@ impl Accumulator for PowerSumAccumulator {
         // The number of power sum equations we need is equal to
         // the number of lost elements. Validation cannot be performed
         // if this number exceeds the threshold.
+        if elems.len() < self.total() {
+            warn!("more elements received than logged");
+            return false;
+        }
         let n_values = elems.len() - self.total();
         let threshold = self.power_sums.len();
         if n_values > threshold {
