@@ -42,7 +42,7 @@ extern "C" {
         coeffs: *const i64,
         field: i64,
         degree: usize,
-    );
+    ) -> i32;
 }
 
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
@@ -174,17 +174,22 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
     */
 }
 
-fn find_integer_monic_polynomial_roots(coeffs: Vec<i64>) -> Vec<i64> {
+fn find_integer_monic_polynomial_roots(
+    coeffs: Vec<i64>,
+) -> Result<Vec<i64>, String> {
     let mut roots: Vec<i64> = vec![0; coeffs.len() - 1];
-    unsafe {
+    if unsafe {
         find_integer_monic_polynomial_roots_libpari(
             roots.as_mut_ptr(),
             coeffs.as_ptr(),
             LARGE_PRIME,
             roots.len(),
-        );
+        )
+    } == 0 {
+        Ok(roots)
+    } else {
+        Err("could not factor polynomial".to_string())
     }
-    roots
 }
 
 impl PowerSumAccumulator {
@@ -256,15 +261,24 @@ impl Accumulator for PowerSumAccumulator {
             power_sums_diff[..n_values].to_vec());
         let t4 = Instant::now();
         debug!("computed polynomial coefficients: {:?}", t4 - t3);
-        let roots = find_integer_monic_polynomial_roots(coeffs);
-        let t5 = Instant::now();
-        debug!("found integer monic polynomial roots: {:?}", t5 - t4);
+        let roots = {
+            let roots = find_integer_monic_polynomial_roots(coeffs);
+            let t5 = Instant::now();
+            debug!("found integer monic polynomial roots: {:?}", t5 - t4);
+            match roots {
+                Ok(roots) => roots,
+                Err(_) => {
+                    return false;
+                }
+            }
+        };
 
         // Check that a solution exists and that the solution is a subset of
         // the element list.
         // TODO: we might also want to recompute the power sum equations beyond
         // n_values in case the router fudged just one equation or something.
         // TODO: is it easy for the router to fudge the equations?
+        let t5 = Instant::now();
         let mut elem_count: HashMap<u32, usize> = HashMap::new();
         for &elem in elems {
             let count = elem_count.entry(elem).or_insert(0);
@@ -351,7 +365,11 @@ mod test {
         let x = vec![2, 3, 5];
         let power_sums_diff = calculate_power_sums(&x, x.len());
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        let mut roots = find_integer_monic_polynomial_roots(coeffs);
+        let mut roots = {
+            let roots = find_integer_monic_polynomial_roots(coeffs);
+            assert!(roots.is_ok());
+            roots.unwrap()
+        };
         roots.sort();
         assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
     }
@@ -361,8 +379,19 @@ mod test {
         let x = vec![3987231002, 4294966796];
         let power_sums_diff = calculate_power_sums(&x, x.len());
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        let mut roots = find_integer_monic_polynomial_roots(coeffs);
+        let mut roots = {
+            let roots = find_integer_monic_polynomial_roots(coeffs);
+            assert!(roots.is_ok());
+            roots.unwrap()
+        };
         roots.sort();
         assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_find_integer_monic_polynomial_roots_no_solution() {
+        let coeffs = vec![1, 47920287469, 12243762544, 39307197049];
+        let roots = find_integer_monic_polynomial_roots(coeffs);
+        assert!(roots.is_err());
     }
 }

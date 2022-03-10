@@ -111,18 +111,16 @@ mod tests {
         base_accumulator_test(Box::new(accumulator), 100, 1, false);
     }
 
-    #[ignore]
     #[test]
     fn power_sum_two_dropped() {
         let accumulator = PowerSumAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 100, 2, false);
     }
 
-    #[ignore]
     #[test]
-    fn power_sum_three_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 3, false);
+    fn power_sum_many_dropped() {
+        let accumulator = PowerSumAccumulator::new(1000);
+        base_accumulator_test(Box::new(accumulator), 1000, 10, false);
     }
 
     #[test]
@@ -131,20 +129,17 @@ mod tests {
         base_accumulator_test(Box::new(accumulator), 100, 0, true);
     }
 
-    #[ignore]
     #[test]
     fn power_sum_one_malicious_and_one_dropped() {
         let accumulator = PowerSumAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 100, 1, true);
     }
 
-    #[ignore]
     #[test]
     fn power_sum_one_malicious_and_many_dropped() {
-        // validation takes much longer to fail because many
-        // combinations must be tried and they all fail
-        let accumulator = PowerSumAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 3, true);
+        // validation is much faster than the naive approach
+        let accumulator = PowerSumAccumulator::new(1000);
+        base_accumulator_test(Box::new(accumulator), 1000, 10, true);
     }
 
     #[test]
