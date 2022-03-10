@@ -105,8 +105,8 @@ fn div_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     mul_and_mod(a, mmi, modulo)
 }
 
-fn calculate_power_sums(elems: &Vec<u32>, n_values: usize) -> Vec<i64> {
-    let mut power_sums: Vec<i64> = vec![0; n_values];
+fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
+    let mut power_sums: Vec<i64> = vec![0; threshold];
     for &elem in elems {
         let mut value = 1;
         for i in 0..power_sums.len() {
@@ -234,15 +234,26 @@ impl Accumulator for PowerSumAccumulator {
 
         // Calculate the power sums of the given list of elements.
         // Find the difference with the power sums of the processed elements.
-        // Solve the system of equations.
+        // If no elements are missing, then all the power sums should be zero.
         let t1 = Instant::now();
-        let power_sums = calculate_power_sums(elems, n_values);
+        let power_sums = calculate_power_sums(elems, threshold);
         let t2 = Instant::now();
         debug!("calculated power sums: {:?}", t2 - t1);
         let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
         let t3 = Instant::now();
         debug!("calculated power sum difference: {:?}", t3 - t2);
-        let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        if n_values == 0 {
+            for diff in power_sums_diff {
+                if diff != 0 {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Solve the system of equations.
+        let coeffs = compute_polynomial_coefficients(
+            power_sums_diff[..n_values].to_vec());
         let t4 = Instant::now();
         debug!("computed polynomial coefficients: {:?}", t4 - t3);
         let roots = find_integer_monic_polynomial_roots(coeffs);
@@ -251,6 +262,9 @@ impl Accumulator for PowerSumAccumulator {
 
         // Check that a solution exists and that the solution is a subset of
         // the element list.
+        // TODO: we might also want to recompute the power sum equations beyond
+        // n_values in case the router fudged just one equation or something.
+        // TODO: is it easy for the router to fudge the equations?
         let mut elem_count: HashMap<u32, usize> = HashMap::new();
         for &elem in elems {
             let count = elem_count.entry(elem).or_insert(0);

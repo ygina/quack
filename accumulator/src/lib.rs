@@ -99,7 +99,6 @@ mod tests {
         base_accumulator_test(Box::new(accumulator), 100, 3, true);
     }
 
-    #[ignore]
     #[test]
     fn power_sum_none_dropped() {
         let accumulator = PowerSumAccumulator::new(100);
@@ -126,7 +125,6 @@ mod tests {
         base_accumulator_test(Box::new(accumulator), 100, 3, false);
     }
 
-    #[ignore]
     #[test]
     fn power_sum_one_malicious_and_none_dropped() {
         let accumulator = PowerSumAccumulator::new(100);
