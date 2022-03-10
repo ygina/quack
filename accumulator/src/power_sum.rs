@@ -28,15 +28,8 @@ pub struct PowerSumAccumulator {
     power_sums: Vec<i64>,
 }
 
-#[link(name = "gmp", kind = "dylib")]
 #[link(name = "pari", kind = "dylib")]
 extern "C" {
-    // fn compute_polynomial_coefficients_wrapper(
-    //     coeffs: *mut i64,
-    //     power_sums: *const i64,
-    //     n_values: usize,
-    // );
-
     fn find_integer_monic_polynomial_roots_libpari(
         roots: *mut i64,
         coeffs: *const i64,
