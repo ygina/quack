@@ -3,6 +3,19 @@ use bloom_sd::CountingBloomFilter;
 use crate::Accumulator;
 use digest::XorDigest;
 
+#[link(name = "glpk", kind = "dylib")]
+extern "C" {
+    fn solve_ilp_glpk(
+        n_buckets: usize,
+        cbf: *const usize,
+        n_hashes: usize,
+        n_packets: usize,
+        pkt_hashes: *const u32,
+        n_dropped: usize,
+        dropped: *mut usize,
+    ) -> i32;
+}
+
 /// The counting bloom filter (CBF) accumulator stores a CBF of all processed
 /// packets in addition to the digest.
 ///
@@ -96,13 +109,42 @@ impl Accumulator for CBFAccumulator {
         // where the coefficients sum to the number of hashes.
         // We can omit an equation if none of the indexes are set in
         // the difference CBF.
-        let eqs: Vec<Vec<usize>> = elems
+        let mut elems_i: Vec<usize> = vec![];
+        let pkt_hashes: Vec<u32> = elems
             .iter()
-            .filter(|elem| cbf.contains(&elem))
-            .map(|elem| cbf.indexes(&elem))
+            .enumerate()
+            .filter(|(_, elem)| cbf.contains(&elem))
+            .flat_map(|(i, elem)| {
+                elems_i.push(i);
+                cbf.indexes(&elem)
+            })
+            .map(|hash| hash as u32)
             .collect();
 
-        unimplemented!("solve ILP with {} eqs in {} variables",
-                       eqs.len(), counters.len(),);
+        // Solve the ILP with GLPK. The result is the indices of the dropped
+        // packets in the `elems_i` vector. This just shows that there is _a_
+        // solution to the ILP, we don't know if it's the right one.
+        let mut dropped: Vec<usize> = vec![0; n_dropped];
+        let err = unsafe {
+            solve_ilp_glpk(
+                counters.len(),
+                counters.as_ptr(),
+                cbf.num_hashes() as usize,
+                elems_i.len(),
+                pkt_hashes.as_ptr(),
+                n_dropped,
+                dropped.as_mut_ptr(),
+            )
+        };
+        if err == 0 {
+            // TODO: do something with `dropped`?
+            for dropped_i in dropped {
+                assert!(dropped_i < elems_i.len());
+            }
+            true
+        } else {
+            warn!("ILP solving error: {}", err);
+            false
+        }
     }
 }

@@ -161,9 +161,9 @@ mod tests {
     }
 
     #[test]
-    fn cbf_three_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 3, false);
+    fn cbf_many_dropped() {
+        let accumulator = CBFAccumulator::new(1000);
+        base_accumulator_test(Box::new(accumulator), 1000, 10, false);
     }
 
     #[test]
