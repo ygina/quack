@@ -54,6 +54,10 @@ impl Accumulator for CBFAccumulator {
 
     fn validate(&self, elems: &Vec<u32>) -> bool {
         let t1 = Instant::now();
+        if elems.len() < self.total() {
+            warn!("more elements received than logged");
+            return false;
+        }
         let mut cbf = self.cbf.empty_clone();
         for &elem in elems {
             cbf.insert(&elem);
