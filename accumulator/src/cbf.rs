@@ -75,11 +75,23 @@ impl Accumulator for CBFAccumulator {
         let t2 = Instant::now();
         debug!("calculated the difference cbf: {:?}", t2 - t1);
 
+        // Handle the case where no packets are dropped. All counters in the
+        // difference CBF should be equal to 0.
         // k constants, the size of the CBF
-        let v: Vec<usize> = (0..(cbf.num_entries() as usize))
+        let counters: Vec<usize> = (0..(cbf.num_entries() as usize))
             .map(|i| cbf.counters().get(i))
             .map(|count| count.try_into().unwrap())
             .collect();
+        let n_dropped = elems.len() - self.total();
+        if n_dropped == 0 {
+            for &counter in &counters {
+                if counter != 0 {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // n equations, the total number of elements, in k variables,
         // where the coefficients sum to the number of hashes.
         // We can omit an equation if none of the indexes are set in
@@ -91,6 +103,6 @@ impl Accumulator for CBFAccumulator {
             .collect();
 
         unimplemented!("solve ILP with {} eqs in {} variables",
-                       eqs.len(), v.len(),);
+                       eqs.len(), counters.len(),);
     }
 }
