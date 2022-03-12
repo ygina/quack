@@ -7,6 +7,7 @@ int32_t find_integer_monic_polynomial_roots_libpari(
     size_t i;
     GEN vec, p, res, f;
     pari_init(1000000, 0);
+    paristack_setsize(1000000, 100000000);
 
     // Initialize mod polynomial and factor
     vec = const_vecsmall(degree + 1, 0);
