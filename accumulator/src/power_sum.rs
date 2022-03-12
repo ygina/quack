@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
+
+use tokio::task;
+use tokio::runtime::Builder;
 use crate::Accumulator;
 use digest::XorDigest;
 
@@ -98,13 +101,38 @@ fn div_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     mul_and_mod(a, mmi, modulo)
 }
 
-fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
+async fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
+    let ncpus = num_cpus::get();
+    let elems_per_thread = elems.len() / ncpus;
+    debug!("found {} cpus", ncpus);
+    let mut joins = vec![];
+    for i in 0..ncpus {
+        let lower = i * elems_per_thread;
+        let upper = if i == ncpus - 1 {
+            elems.len()
+        } else {
+            (i + 1) * elems_per_thread
+        };
+        let elems = elems[lower..upper].to_vec();  // TODO: avoid clone
+        joins.push(task::spawn(async move {
+            let mut power_sums: Vec<i64> = vec![0; threshold];
+            for i in 0..elems.len() {
+                let mut value = 1;
+                for j in 0..power_sums.len() {
+                    value = mul_and_mod(value, elems[i] as i64, LARGE_PRIME);
+                    power_sums[j] = (power_sums[j] + value) % LARGE_PRIME;
+                }
+            }
+            power_sums
+        }));
+    }
+
+    // merge results
     let mut power_sums: Vec<i64> = vec![0; threshold];
-    for &elem in elems {
-        let mut value = 1;
-        for i in 0..power_sums.len() {
-            value = mul_and_mod(value, elem as i64, LARGE_PRIME);
-            power_sums[i] = (power_sums[i] + value) % LARGE_PRIME;
+    for join in joins {
+        let result = join.await.unwrap();
+        for i in 0..threshold {
+            power_sums[i] += result[i];
         }
     }
     power_sums
@@ -234,7 +262,10 @@ impl Accumulator for PowerSumAccumulator {
         // Find the difference with the power sums of the processed elements.
         // If no elements are missing, then all the power sums should be zero.
         let t1 = Instant::now();
-        let power_sums = calculate_power_sums(elems, threshold);
+        let rt = Builder::new_multi_thread().enable_all().build().unwrap();
+        let power_sums = rt.block_on(async {
+            calculate_power_sums(elems, threshold).await
+        });
         let t2 = Instant::now();
         debug!("calculated power sums: {:?}", t2 - t1);
         let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
@@ -313,13 +344,13 @@ mod test {
         assert_eq!(div_and_mod(8, 6, 10), 8);
     }
 
-    #[test]
-    fn test_calculate_power_sums() {
-        assert_eq!(calculate_power_sums(&vec![2, 3, 5], 2), vec![10, 38]);
-        assert_eq!(calculate_power_sums(&vec![2, 3, 5], 3), vec![10, 38, 160]);
-        let one_large_num = calculate_power_sums(&vec![4294967295], 3);
+    #[tokio::test]
+    async fn test_calculate_power_sums() {
+        assert_eq!(calculate_power_sums(&vec![2, 3, 5], 2).await, vec![10, 38]);
+        assert_eq!(calculate_power_sums(&vec![2, 3, 5], 3).await, vec![10, 38, 160]);
+        let one_large_num = calculate_power_sums(&vec![4294967295], 3).await;
         assert_eq!(one_large_num, vec![4294967295, 8947848534, 17567609286]);
-        let two_large_nums = calculate_power_sums(&vec![4294967295, 2294967295], 3);
+        let two_large_nums = calculate_power_sums(&vec![4294967295, 2294967295], 3).await;
         assert_eq!(two_large_nums, vec![6589934590, 32873368637, 30483778854]);
     }
 
@@ -333,19 +364,19 @@ mod test {
         assert_eq!(overflow_diff, vec![51539607550]);
     }
 
-    #[test]
-    fn test_compute_polynomial_coefficients_small_numbers() {
+    #[tokio::test]
+    async fn test_compute_polynomial_coefficients_small_numbers() {
         let x = vec![2, 3, 5];
-        let power_sums_diff = calculate_power_sums(&x, 3);
+        let power_sums_diff = calculate_power_sums(&x, 3).await;
         assert_eq!(power_sums_diff, vec![10, 38, 160]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         assert_eq!(coeffs, vec![1, -10+LARGE_PRIME, 31, -30+LARGE_PRIME]);
     }
 
-    #[test]
-    fn test_compute_polynomial_coefficients_large_numbers() {
+    #[tokio::test]
+    async fn test_compute_polynomial_coefficients_large_numbers() {
         let x = vec![4294966796, 3987231002];
-        let power_sums_diff = calculate_power_sums(&x, 2);
+        let power_sums_diff = calculate_power_sums(&x, 2).await;
         assert_eq!(power_sums_diff, vec![8282197798, 20796235250]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let e1 = (x[0] as i64) + (x[1] as i64) % LARGE_PRIME;
@@ -353,10 +384,10 @@ mod test {
         assert_eq!(coeffs, vec![1, -e1+LARGE_PRIME, e2]);
     }
 
-    #[test]
-    fn test_find_integer_monic_polynomial_roots_small_numbers() {
+    #[tokio::test]
+    async fn test_find_integer_monic_polynomial_roots_small_numbers() {
         let x = vec![2, 3, 5];
-        let power_sums_diff = calculate_power_sums(&x, x.len());
+        let power_sums_diff = calculate_power_sums(&x, x.len()).await;
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let mut roots = {
             let roots = find_integer_monic_polynomial_roots(coeffs);
@@ -367,10 +398,10 @@ mod test {
         assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
     }
 
-    #[test]
-    fn test_find_integer_monic_polynomial_roots_large_numbers() {
+    #[tokio::test]
+    async fn test_find_integer_monic_polynomial_roots_large_numbers() {
         let x = vec![3987231002, 4294966796];
-        let power_sums_diff = calculate_power_sums(&x, x.len());
+        let power_sums_diff = calculate_power_sums(&x, x.len()).await;
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let mut roots = {
             let roots = find_integer_monic_polynomial_roots(coeffs);
