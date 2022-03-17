@@ -6,6 +6,9 @@ mod iblt;
 mod naive;
 mod power_sum;
 
+use std::collections::HashMap;
+use digest::XorDigest;
+
 pub use cbf::CBFAccumulator;
 pub use iblt::IBLTAccumulator;
 pub use naive::NaiveAccumulator;
@@ -23,6 +26,24 @@ pub trait Accumulator {
     /// The accumulator is valid if the elements that the accumulator has
     /// processed are a subset of the provided list of elements.
     fn validate(&self, elems: &Vec<u32>) -> bool;
+}
+
+fn check_digest(
+    elems: &Vec<u32>,
+    mut dropped_count: HashMap<u32, usize>,
+    expected: &XorDigest,
+) -> bool {
+    let mut digest = XorDigest::new();
+    for &elem in elems {
+        if let Some(count) = dropped_count.remove(&elem) {
+            if count > 0 {
+                dropped_count.insert(elem, count - 1);
+            }
+        } else {
+            digest.add(elem);
+        }
+    }
+    &digest == expected
 }
 
 #[cfg(test)]

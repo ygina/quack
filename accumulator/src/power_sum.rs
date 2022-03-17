@@ -302,28 +302,19 @@ impl Accumulator for PowerSumAccumulator {
         // calculating the digest from the element list with those packets
         // removed yields the same digest, then verification succeeds.
         let t5 = Instant::now();
-        let mut elem_count: HashMap<u32, usize> = HashMap::new();
+        let mut dropped_count: HashMap<u32, usize> = HashMap::new();
         for root in roots {
             let root = u32::try_from(root);
             if root.is_err() {
                 return false;  // Root is not in the packet domain.
             }
-            let count = elem_count.entry(root.unwrap()).or_insert(0);
+            let count = dropped_count.entry(root.unwrap()).or_insert(0);
             *count += 1;
         }
-        let mut digest = XorDigest::new();
-        for &elem in elems {
-            if let Some(count) = elem_count.remove(&elem) {
-                if count > 0 {
-                    elem_count.insert(elem, count - 1);
-                }
-            } else {
-                digest.add(elem);
-            }
-        }
+        let res = crate::check_digest(elems, dropped_count, &self.digest);
         let t6 = Instant::now();
         debug!("recalculated digest: {:?}", t6 - t5);
-        digest == self.digest
+        res
     }
 }
 
