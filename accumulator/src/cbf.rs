@@ -121,7 +121,12 @@ impl Accumulator for CBFAccumulator {
             .map(|hash| hash as u32)
             .collect();
         let t3 = Instant::now();
-        debug!("setup the system of equations: {:?}", t3 - t2);
+        info!("setup system of {} eqs in {} vars (expect {} solutions, {}): {:?}",
+            elems_i.len(),
+            counters.len(),
+            counters.iter().sum::<usize>() / cbf.num_hashes() as usize,
+            n_dropped,
+            t3 - t2);
 
         // Solve the ILP with GLPK. The result is the indices of the dropped
         // packets in the `elems_i` vector. This just shows that there is _a_
@@ -139,8 +144,7 @@ impl Accumulator for CBFAccumulator {
             )
         };
         let t4 = Instant::now();
-        debug!("solved an ILP with {} equations in {} variables: {:?}",
-            elems_i.len(), counters.len(), t4 - t3);
+        debug!("solved ILP: {:?}", t4 - t3);
         if err == 0 {
             // TODO: do something with `dropped`?
             for dropped_i in dropped {
