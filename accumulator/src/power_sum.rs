@@ -101,7 +101,7 @@ fn div_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     mul_and_mod(a, mmi, modulo)
 }
 
-async fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
+async fn calculate_power_sums(elems: &Vec<u32>, num_psums: usize) -> Vec<i64> {
     let ncpus = num_cpus::get();
     let elems_per_thread = elems.len() / ncpus;
     debug!("found {} cpus", ncpus);
@@ -115,7 +115,7 @@ async fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
         };
         let elems = elems[lower..upper].to_vec();  // TODO: avoid clone
         joins.push(task::spawn(async move {
-            let mut power_sums: Vec<i64> = vec![0; threshold];
+            let mut power_sums: Vec<i64> = vec![0; num_psums];
             for i in 0..elems.len() {
                 let mut value = 1;
                 for j in 0..power_sums.len() {
@@ -128,10 +128,10 @@ async fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
     }
 
     // merge results
-    let mut power_sums: Vec<i64> = vec![0; threshold];
+    let mut power_sums: Vec<i64> = vec![0; num_psums];
     for join in joins {
         let result = join.await.unwrap();
-        for i in 0..threshold {
+        for i in 0..num_psums {
             power_sums[i] += result[i];
         }
     }
@@ -139,7 +139,7 @@ async fn calculate_power_sums(elems: &Vec<u32>, threshold: usize) -> Vec<i64> {
 }
 
 fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
-    (0..lhs.len())
+    (0..std::cmp::min(lhs.len(), rhs.len()))
         .map(|i| lhs[i] + LARGE_PRIME - rhs[i])
         .map(|power_sum| power_sum % LARGE_PRIME)
         .collect()
@@ -258,27 +258,27 @@ impl Accumulator for PowerSumAccumulator {
             panic!("number of lost elements exceeds threshold");
         }
 
+        // If no elements are missing, just recalculate the digest.
+        if n_values == 0 {
+            let mut digest = XorDigest::new();
+            for &elem in elems {
+                digest.add(elem);
+            }
+            return digest == self.digest;
+        }
+
         // Calculate the power sums of the given list of elements.
         // Find the difference with the power sums of the processed elements.
-        // If no elements are missing, then all the power sums should be zero.
         let t1 = Instant::now();
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();
         let power_sums = rt.block_on(async {
-            calculate_power_sums(elems, threshold).await
+            calculate_power_sums(elems, n_values).await
         });
         let t2 = Instant::now();
         debug!("calculated power sums: {:?}", t2 - t1);
         let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
         let t3 = Instant::now();
         debug!("calculated power sum difference: {:?}", t3 - t2);
-        if n_values == 0 {
-            for diff in power_sums_diff {
-                if diff != 0 {
-                    return false;
-                }
-            }
-            return true;
-        }
 
         // Solve the system of equations.
         let coeffs = compute_polynomial_coefficients(
@@ -297,31 +297,33 @@ impl Accumulator for PowerSumAccumulator {
             }
         };
 
-        // Check that a solution exists and that the solution is a subset of
-        // the element list.
-        // TODO: we might also want to recompute the power sum equations beyond
-        // n_values in case the router fudged just one equation or something.
-        // TODO: is it easy for the router to fudge the equations?
+        // This technique gives a single deterministic solution.
+        // If the solutions are indeed packets in the element list, and
+        // calculating the digest from the element list with those packets
+        // removed yields the same digest, then verification succeeds.
         let t5 = Instant::now();
         let mut elem_count: HashMap<u32, usize> = HashMap::new();
-        for &elem in elems {
-            let count = elem_count.entry(elem).or_insert(0);
-            *count += 1;
-        }
         for root in roots {
             let root = u32::try_from(root);
             if root.is_err() {
-                return false;
+                return false;  // Root is not in the packet domain.
             }
             let count = elem_count.entry(root.unwrap()).or_insert(0);
-            if *count == 0 {
-                return false;
+            *count += 1;
+        }
+        let mut digest = XorDigest::new();
+        for &elem in elems {
+            if let Some(count) = elem_count.remove(&elem) {
+                if count > 0 {
+                    elem_count.insert(elem, count - 1);
+                }
+            } else {
+                digest.add(elem);
             }
-            *count -= 1;
         }
         let t6 = Instant::now();
-        debug!("checked roots against element list: {:?}", t6 - t5);
-        true
+        debug!("recalculated digest: {:?}", t6 - t5);
+        digest == self.digest
     }
 }
 
