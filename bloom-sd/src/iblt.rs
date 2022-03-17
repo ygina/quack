@@ -149,13 +149,13 @@ impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
             .collect()
     }
 
-    /// Removes any elements in the list that are also definitely in the
-    /// IBLT from both the list and the IBLT. Returns the number removed.
-    /// Panics if an element in the IBLT is not in the given HashSet.
-    pub fn eliminate_elems(&mut self, items: &mut HashSet<Packet>) -> usize {
+    /// Enumerates as many items as possible in the IBLT and removes them.
+    /// Returns the removed items. Note removed elements must be unique
+    /// unless the IBLT uses an accumulator function that is not an XOR.
+    pub fn eliminate_elems(&mut self) -> HashSet<Packet> {
         // Loop through all the counters of the IBLT until there are no
         // remaining cells with count 1. This is O(num_counters*max_count).
-        let mut num_removed = 0;
+        let mut removed_set: HashSet<Packet> = HashSet::new();
         loop {
             let mut removed = false;
             for i in 0..(self.num_entries as usize) {
@@ -163,15 +163,12 @@ impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
                     continue;
                 }
                 let item = self.xors[i];
-                if !items.remove(&item) {
-                    panic!("element in the IBLT is not in the hashset");
-                }
                 self.remove(&item);
+                assert!(removed_set.insert(item));
                 removed = true;
-                num_removed += 1;
             }
             if !removed {
-                return num_removed;
+                return removed_set;
             }
         }
     }

@@ -1,5 +1,5 @@
 use std::time::Instant;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use bloom_sd::InvBloomLookupTable;
 use crate::Accumulator;
 use digest::XorDigest;
@@ -84,6 +84,17 @@ impl Accumulator for IBLTAccumulator {
             warn!("more elements received than logged");
             return false;
         }
+
+        // If no elements are missing, just recalculate the digest.
+        let n_dropped = elems.len() - self.total();
+        if n_dropped == 0 {
+            let mut digest = XorDigest::new();
+            for &elem in elems {
+                digest.add(elem);
+            }
+            return digest == self.digest;
+        }
+
         let mut iblt = self.iblt.empty_clone();
         for &elem in elems {
             iblt.insert(&elem);
@@ -111,71 +122,62 @@ impl Accumulator for IBLTAccumulator {
         let t2 = Instant::now();
         info!("calculated the difference iblt: {:?}", t2 - t1);
 
-        // Handle the case where no packets are dropped. All counters in the
-        // difference IBLT should be equal to 0.
-        // k constants, the size of the IBLT
-        let n_dropped = elems.len() - self.total();
-        if n_dropped == 0 {
-            for i in 0..(iblt.num_entries() as usize) {
-                if iblt.counters().get(i) != 0 || iblt.xors()[i] != 0 {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        // Find the list of candidate dropped elements by eliminating
-        // any whose indexes are 0. Then remove one-by-one any elements
-        // that are definitely dropped based on counters that are set to 1.
-        let num_dropped_elems = elems.len() - self.total();
-        let mut maybe_dropped_elems: HashSet<u32> = elems
-            .iter()
-            .filter(|elem| iblt.contains(&elem))
-            .map(|elem| *elem)
-            .collect();
-        // TODO: what if elements are not unique?
-        assert!(num_dropped_elems <= maybe_dropped_elems.len());
-        let num_removed = iblt.eliminate_elems(&mut maybe_dropped_elems);
+        // Remove any elements that are definitely dropped based on counters
+        // in the IBLT that are set to 1. Then find the remaining list of
+        // candidate dropped elements by based on any whose indexes are still
+        // not 0. If elements are not unique, the ILP can find _a_ solution.
+        let mut removed = iblt.eliminate_elems();
         let t3 = Instant::now();
-        info!("eliminated {}/{} elements using the iblt ({} remaining): {:?}",
-            num_removed, num_dropped_elems, maybe_dropped_elems.len(), t3 - t2);
+        info!("eliminated {}/{} elements using the iblt: {:?}",
+            removed.len(), n_dropped, t3 - t2);
 
         // The remaining maybe dropped elements should make up any non-zero
         // entries in the IBLT. Since we checked that the number of dropped
         // elements is at most the size of the original set, if we removed the
         // number of dropped elements, then the IBLT necessarily only has zero
-        // entries. This means solving an ILP is unnecessary and the log is
-        // not malicious.
-        if num_removed == num_dropped_elems {
+        // entries. This means solving an ILP is unnecessary but we still
+        // sanity check that the digest matches.
+        if removed.len() == n_dropped {
+            let mut digest = XorDigest::new();
+            for elem in elems {
+                if !removed.remove(elem) {
+                    digest.add(*elem);
+                }
+            }
+            assert!(digest == self.digest);
             return true;
         }
 
         // Then there are still some remaining candidate dropped elements,
-        // and the IBLT is not empty.
-        // n equations, the total number of elements, in k variables,
-        // where the coefficients sum to the number of hashes.
-        let maybe_dropped_elems: Vec<u32> = maybe_dropped_elems.into_iter().collect();
-        let pkt_hashes: Vec<u32> = maybe_dropped_elems
+        // and the IBLT is not empty. n equations, the number of remaining
+        // candidate elements, in k variables, the number of cells in the IBLT.
+        let mut elems_i: Vec<usize> = vec![];
+        let pkt_hashes: Vec<u32> = elems
             .iter()
-            .flat_map(|elem| iblt.indexes(&elem))
+            .enumerate()
+            .filter(|(_, elem)| iblt.contains(&elem))
+            .flat_map(|(i, elem)| {
+                elems_i.push(i);
+                iblt.indexes(&elem)
+            })
             .map(|hash| hash as u32)
             .collect();
         let counters: Vec<usize> = (0..(iblt.num_entries() as usize))
             .map(|i| iblt.counters().get(i))
             .map(|count| count.try_into().unwrap())
             .collect();
-        let n_dropped_remaining =
-            counters.iter().sum::<usize>() / iblt.num_hashes() as usize;
+        assert!(n_dropped > removed.len());
+        let n_dropped_remaining = n_dropped - removed.len();
+        assert!(n_dropped_remaining >= elems_i.len());
         let t4 = Instant::now();
-        info!("setup system of {} eqs in {} vars (expect {} solutions, {}): {:?}",
-            maybe_dropped_elems.len(),
+        info!("setup system of {} eqs in {} vars (expect sols to sum to {}): {:?}",
+            elems_i.len(),
             counters.len(),
             n_dropped_remaining,
-            n_dropped,
             t4 - t3);
 
         // Solve the ILP with GLPK. The result is the indices of the dropped
-        // packets in the `maybe_dropped_elems` vector. The number of solutions
+        // packets in the `maybe_dropped` vector. The number of solutions
         // does not depend entirely on the number of equations and variables.
         // Instead, if there are fewer (linearly independent) equations than
         // the sum of the counters divided by the number of hashes, then there
@@ -186,22 +188,26 @@ impl Accumulator for IBLTAccumulator {
                 counters.len(),
                 counters.as_ptr(),
                 iblt.num_hashes() as usize,
-                maybe_dropped_elems.len(),
+                elems_i.len(),
                 pkt_hashes.as_ptr(),
-                n_dropped,
+                n_dropped_remaining,
                 dropped.as_mut_ptr(),
             )
         };
         let t5 = Instant::now();
         info!("solved ILP: {:?}", t5 - t4);
         if err == 0 {
-            // TODO: do something with `dropped`?
             // TODO: verify the XORs check out when removing these elements
-            // from the difference IBLT
+            // from the difference IBLT?
+            let mut dropped_count: HashMap<u32, usize> = HashMap::new();
             for dropped_i in dropped {
-                assert!(dropped_i < maybe_dropped_elems.len());
+                let elem = elems[elems_i[dropped_i]];
+                *(dropped_count.entry(elem).or_insert(0)) += 1;
             }
-            true
+            for elem in removed {
+                *(dropped_count.entry(elem).or_insert(0)) += 1;
+            }
+            crate::check_digest(elems, dropped_count, &self.digest)
         } else {
             warn!("ILP solving error: {}", err);
             false
