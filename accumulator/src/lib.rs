@@ -2,10 +2,12 @@
 extern crate log;
 
 mod cbf;
+mod iblt;
 mod naive;
 mod power_sum;
 
 pub use cbf::CBFAccumulator;
+pub use iblt::IBLTAccumulator;
 pub use naive::NaiveAccumulator;
 pub use power_sum::PowerSumAccumulator;
 
@@ -183,6 +185,48 @@ mod tests {
         // validation is much faster compared to the naive approach,
         // so we increase the number of packets
         let accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 1000, 10, true);
+    }
+
+    #[test]
+    fn iblt_none_dropped() {
+        let accumulator = IBLTAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, false);
+    }
+
+    #[test]
+    fn iblt_one_dropped() {
+        let accumulator = IBLTAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 1, false);
+    }
+
+    #[test]
+    fn iblt_many_dropped_without_ilp_solver() {
+        let accumulator = IBLTAccumulator::new(1000);
+        base_accumulator_test(Box::new(accumulator), 1000, 10, false);
+    }
+
+    #[test]
+    fn iblt_many_dropped_with_ilp_solver() {
+        let accumulator = IBLTAccumulator::new_with_rate(1000, 0.1);
+        base_accumulator_test(Box::new(accumulator), 1000, 100, false);
+    }
+
+    #[test]
+    fn iblt_one_malicious_and_none_dropped() {
+        let accumulator = IBLTAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, true);
+    }
+
+    #[test]
+    fn iblt_one_malicious_and_one_dropped() {
+        let accumulator = IBLTAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 1, true);
+    }
+
+    #[test]
+    fn iblt_one_malicious_and_many_dropped() {
+        let accumulator = IBLTAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 1000, 10, true);
     }
 }

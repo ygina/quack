@@ -5,8 +5,7 @@ pub mod generator;
 
 use std::time::Instant;
 use clap::{Arg, Command};
-use accumulator::Accumulator;
-use accumulator::{CBFAccumulator, NaiveAccumulator, PowerSumAccumulator};
+use accumulator::*;
 use generator::LoadGenerator;
 
 fn main() {
@@ -44,6 +43,7 @@ fn main() {
             .takes_value(true)
             .possible_value("naive")
             .possible_value("cbf")
+            .possible_value("iblt")
             .possible_value("power_sum")
             .required(true))
         .get_matches();
@@ -63,6 +63,7 @@ fn main() {
         match matches.value_of("accumulator").unwrap() {
             "naive" => Box::new(NaiveAccumulator::new()),
             "cbf" => Box::new(CBFAccumulator::new(threshold)),
+            "iblt" => Box::new(IBLTAccumulator::new(threshold)),
             "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
             _ => unreachable!(),
         }
