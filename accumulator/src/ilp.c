@@ -83,12 +83,12 @@ next_hash:  continue;
     // TODO: what if there are multiple solutions?
     size_t len = 0;
     for (size_t i = 0; i < n_packets; i++) {
+        if (!glp_mip_col_val(prob, i + 1)) continue;
+
         // dropped more packets than expected
-        if (len >= n_dropped) {
-            return -2;
-        }
-        if (glp_mip_col_val(prob, i + 1))
-            dropped[len++] = i;
+        if (len >= n_dropped) return -2;
+
+        dropped[len++] = i;
     }
     // dropped fewer packets than expected
     if (len < n_dropped) {
