@@ -168,7 +168,7 @@ impl Accumulator for IBLTAccumulator {
             .collect();
         assert!(n_dropped > removed.len());
         let n_dropped_remaining = n_dropped - removed.len();
-        assert!(n_dropped_remaining >= elems_i.len());
+        assert!(n_dropped_remaining <= elems_i.len());
         let t4 = Instant::now();
         info!("setup system of {} eqs in {} vars (expect sols to sum to {}): {:?}",
             elems_i.len(),
