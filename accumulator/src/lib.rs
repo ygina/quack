@@ -7,7 +7,7 @@ mod naive;
 mod power_sum;
 
 use std::collections::HashMap;
-use digest::XorDigest;
+use digest::Digest;
 
 pub use cbf::CBFAccumulator;
 pub use iblt::IBLTAccumulator;
@@ -31,9 +31,9 @@ pub trait Accumulator {
 fn check_digest(
     elems: &Vec<u32>,
     mut dropped_count: HashMap<u32, usize>,
-    expected: &XorDigest,
+    expected: &Digest,
 ) -> bool {
-    let mut digest = XorDigest::new();
+    let mut digest = Digest::new();
     for &elem in elems {
         if let Some(count) = dropped_count.remove(&elem) {
             if count > 0 {
@@ -43,7 +43,7 @@ fn check_digest(
             digest.add(elem);
         }
     }
-    &digest == expected
+    digest.equals(expected)
 }
 
 #[cfg(test)]

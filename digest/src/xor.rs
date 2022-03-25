@@ -2,7 +2,6 @@
 ///
 /// This is not a multiset hash, and cannot distinguish between different
 /// even or odd quantities of the same element.
-#[derive(PartialEq, Eq, )]
 pub struct XorDigest {
     hash: u32,
 }
@@ -27,6 +26,11 @@ impl XorDigest {
     /// Returns the digest value.
     pub fn value(&self) -> u32 {
         self.hash
+    }
+
+    /// Checks if two XOR digests are equal.
+    pub fn equals(&self, other: &Self) -> bool {
+        self.hash == other.hash
     }
 }
 

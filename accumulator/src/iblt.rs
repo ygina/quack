@@ -2,7 +2,7 @@ use std::time::Instant;
 use std::collections::HashMap;
 use bloom_sd::InvBloomLookupTable;
 use crate::Accumulator;
-use digest::XorDigest;
+use digest::Digest;
 
 #[link(name = "glpk", kind = "dylib")]
 extern "C" {
@@ -26,7 +26,7 @@ extern "C" {
 /// produces the same IBLT, we can say with high probability the log is good.
 /// The count may be stored modulo some number.
 pub struct IBLTAccumulator {
-    digest: XorDigest,
+    digest: Digest,
     num_elems: usize,
     iblt: InvBloomLookupTable,
 }
@@ -38,7 +38,7 @@ const FALSE_POSITIVE_RATE: f32 = 0.0001;
 impl IBLTAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
-            digest: XorDigest::new(),
+            digest: Digest::new(),
             num_elems: 0,
             iblt: InvBloomLookupTable::with_rate(
                 BITS_PER_ENTRY,
@@ -50,7 +50,7 @@ impl IBLTAccumulator {
 
     pub fn new_with_rate(threshold: usize, fp_rate: f32) -> Self {
         Self {
-            digest: XorDigest::new(),
+            digest: Digest::new(),
             num_elems: 0,
             iblt: InvBloomLookupTable::with_rate(
                 BITS_PER_ENTRY,
@@ -88,11 +88,11 @@ impl Accumulator for IBLTAccumulator {
         // If no elements are missing, just recalculate the digest.
         let n_dropped = elems.len() - self.total();
         if n_dropped == 0 {
-            let mut digest = XorDigest::new();
+            let mut digest = Digest::new();
             for &elem in elems {
                 digest.add(elem);
             }
-            return digest == self.digest;
+            return digest.equals(&self.digest);
         }
 
         let mut iblt = self.iblt.empty_clone();
@@ -138,13 +138,13 @@ impl Accumulator for IBLTAccumulator {
         // entries. This means solving an ILP is unnecessary but we still
         // sanity check that the digest matches.
         if removed.len() == n_dropped {
-            let mut digest = XorDigest::new();
+            let mut digest = Digest::new();
             for elem in elems {
                 if !removed.remove(elem) {
                     digest.add(*elem);
                 }
             }
-            assert!(digest == self.digest);
+            assert!(digest.equals(&self.digest));
             return true;
         }
 

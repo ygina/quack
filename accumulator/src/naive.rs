@@ -1,7 +1,7 @@
 use std::time::Instant;
 use itertools::Itertools;
 use crate::Accumulator;
-use digest::XorDigest;
+use digest::Digest;
 
 /// The naive accumulator stores no auxiliary data structures outside
 /// of the digest.
@@ -12,14 +12,14 @@ use digest::XorDigest;
 /// from these subsets are equal to the existing digest. This approach
 /// is exponential in the number of processed elements.
 pub struct NaiveAccumulator {
-    digest: XorDigest,
+    digest: Digest,
     num_elems: usize,
 }
 
 impl NaiveAccumulator {
     pub fn new() -> Self {
         Self {
-            digest: XorDigest::new(),
+            digest: Digest::new(),
             num_elems: 0,
         }
     }
@@ -45,13 +45,13 @@ impl Accumulator for NaiveAccumulator {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
                 .combinations(self.num_elems).enumerate() {
-            let mut digest = XorDigest::new();
+            let mut digest = Digest::new();
             // We could amortize digest calculation using the previous digest,
             // but it's still exponential in the number of subsets
             for index in combination {
                 digest.add(elems[index]);
             }
-            if digest == self.digest {
+            if digest.equals(&self.digest) {
                 return true;
             }
             if i % 1000 == 0 && i != 0 {

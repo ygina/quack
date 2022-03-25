@@ -4,7 +4,7 @@ use std::time::Instant;
 use tokio::task;
 use tokio::runtime::Builder;
 use crate::Accumulator;
-use digest::XorDigest;
+use digest::Digest;
 
 /// I picked some random prime number in the range [2^32, 2^64] from
 /// https://en.wikipedia.org/wiki/List_of_prime_numbers.
@@ -26,7 +26,7 @@ const LARGE_PRIME: i64 = 51539607551;
 /// exceeds the threshold. All calculations are done in a finite field, modulo
 /// some 2^32 < large prime < 2^64 (the range of possible elements).
 pub struct PowerSumAccumulator {
-    digest: XorDigest,
+    digest: Digest,
     num_elems: usize,
     power_sums: Vec<i64>,
 }
@@ -216,7 +216,7 @@ fn find_integer_monic_polynomial_roots(
 impl PowerSumAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
-            digest: XorDigest::new(),
+            digest: Digest::new(),
             num_elems: 0,
             power_sums: (0..threshold).map(|_| 0).collect(),
         }
@@ -260,11 +260,11 @@ impl Accumulator for PowerSumAccumulator {
 
         // If no elements are missing, just recalculate the digest.
         if n_values == 0 {
-            let mut digest = XorDigest::new();
+            let mut digest = Digest::new();
             for &elem in elems {
                 digest.add(elem);
             }
-            return digest == self.digest;
+            return digest.equals(&self.digest);
         }
 
         // Calculate the power sums of the given list of elements.

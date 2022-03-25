@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use bloom_sd::CountingBloomFilter;
 use crate::Accumulator;
-use digest::XorDigest;
+use digest::Digest;
 
 #[link(name = "glpk", kind = "dylib")]
 extern "C" {
@@ -26,7 +26,7 @@ extern "C" {
 /// produces the same CBF, we can say with high probability the log is good.
 /// The count may be stored modulo some number.
 pub struct CBFAccumulator {
-    digest: XorDigest,
+    digest: Digest,
     num_elems: usize,
     cbf: CountingBloomFilter,
 }
@@ -38,7 +38,7 @@ const FALSE_POSITIVE_RATE: f32 = 0.0001;
 impl CBFAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
-            digest: XorDigest::new(),
+            digest: Digest::new(),
             num_elems: 0,
             cbf: CountingBloomFilter::with_rate(
                 BITS_PER_ENTRY,
@@ -76,11 +76,11 @@ impl Accumulator for CBFAccumulator {
         // If no elements are missing, just recalculate the digest.
         let n_dropped = elems.len() - self.total();
         if n_dropped == 0 {
-            let mut digest = XorDigest::new();
+            let mut digest = Digest::new();
             for &elem in elems {
                 digest.add(elem);
             }
-            return digest == self.digest;
+            return digest.equals(&self.digest);
         }
 
         // Calculate the difference CBF.
