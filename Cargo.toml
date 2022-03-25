@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "accumulator",
+    "benchmark",
+    "bloom-sd",
+    "digest",
+]
