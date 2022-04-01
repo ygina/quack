@@ -37,26 +37,38 @@ const FALSE_POSITIVE_RATE: f32 = 0.0001;
 
 impl IBLTAccumulator {
     pub fn new(threshold: usize) -> Self {
+        let iblt = InvBloomLookupTable::with_rate(
+            BITS_PER_ENTRY,
+            FALSE_POSITIVE_RATE,
+            threshold.try_into().unwrap(),
+        );
+        let xor_size = std::mem::size_of_val(&iblt.xors()[0]);
+        debug!("{} entries and {} bits per entry",
+            iblt.num_entries(), BITS_PER_ENTRY);
+        info!("size of iblt = {} bytes",
+            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + xor_size) / 8);
         Self {
             digest: Digest::new(),
             num_elems: 0,
-            iblt: InvBloomLookupTable::with_rate(
-                BITS_PER_ENTRY,
-                FALSE_POSITIVE_RATE,
-                threshold.try_into().unwrap(),
-            ),
+            iblt,
         }
     }
 
     pub fn new_with_rate(threshold: usize, fp_rate: f32) -> Self {
+        let iblt = InvBloomLookupTable::with_rate(
+            BITS_PER_ENTRY,
+            fp_rate,
+            threshold.try_into().unwrap(),
+        );
+        let xor_size = std::mem::size_of_val(&iblt.xors()[0]);
+        debug!("{} entries and {} bits per entry",
+            iblt.num_entries(), BITS_PER_ENTRY);
+        info!("size of iblt = {} bytes",
+            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + xor_size) / 8);
         Self {
             digest: Digest::new(),
             num_elems: 0,
-            iblt: InvBloomLookupTable::with_rate(
-                BITS_PER_ENTRY,
-                fp_rate,
-                threshold.try_into().unwrap(),
-            ),
+            iblt,
         }
     }
 }
