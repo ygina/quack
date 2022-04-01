@@ -42,11 +42,11 @@ impl IBLTAccumulator {
             FALSE_POSITIVE_RATE,
             threshold.try_into().unwrap(),
         );
-        let xor_size = std::mem::size_of_val(&iblt.xors()[0]);
+        let data_size = std::mem::size_of_val(&iblt.data()[0]);
         debug!("{} entries and {} bits per entry",
             iblt.num_entries(), BITS_PER_ENTRY);
         info!("size of iblt = {} bytes",
-            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + xor_size) / 8);
+            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + data_size) / 8);
         Self {
             digest: Digest::new(),
             num_elems: 0,
@@ -60,11 +60,11 @@ impl IBLTAccumulator {
             fp_rate,
             threshold.try_into().unwrap(),
         );
-        let xor_size = std::mem::size_of_val(&iblt.xors()[0]);
+        let data_size = std::mem::size_of_val(&iblt.data()[0]);
         debug!("{} entries and {} bits per entry",
             iblt.num_entries(), BITS_PER_ENTRY);
         info!("size of iblt = {} bytes",
-            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + xor_size) / 8);
+            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + data_size) / 8);
         Self {
             digest: Digest::new(),
             num_elems: 0,
@@ -122,14 +122,18 @@ impl Accumulator for IBLTAccumulator {
             let difference_count = processed_count - received_count;
             iblt.counters_mut().set(i, difference_count);
 
-            // Additionally set the XOR value
-            let processed_xor = iblt.xors()[i];
-            let received_xor = self.iblt.xors()[i];
-            let difference_xor = processed_xor ^ received_xor;
-            if difference_count == 0 && difference_xor != 0 {
+            // Additionally set the data value
+            let processed_data = iblt.data()[i];
+            let received_data = self.iblt.data()[i];
+            let difference_data = if processed_data >= received_data {
+                processed_data - received_data
+            } else {
+                (u32::MAX - received_data) + processed_data
+            };
+            if difference_count == 0 && difference_data != 0 {
                 return false;
             }
-            iblt.xors_mut()[i] = difference_xor;
+            iblt.data_mut()[i] = difference_data;
         }
         let t2 = Instant::now();
         info!("calculated the difference iblt: {:?}", t2 - t1);

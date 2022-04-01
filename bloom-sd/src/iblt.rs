@@ -11,7 +11,7 @@ type Packet = u32;
 /// Elements are u32s.
 pub struct InvBloomLookupTable<R = RandomState, S = RandomState> {
     counters: ValueVec,
-    xors: Vec<Packet>,
+    data: Vec<Packet>,
     num_entries: u64,
     num_hashes: u32,
     hash_builder_one: R,
@@ -35,7 +35,7 @@ impl InvBloomLookupTable<RandomState, RandomState> {
             expected_num_items,
         );
         InvBloomLookupTable {
-            xors: vec![0; num_entries],
+            data: vec![0; num_entries],
             counters: ValueVec::new(bits_per_entry, num_entries),
             num_entries: num_entries as u64,
             num_hashes,
@@ -48,7 +48,7 @@ impl InvBloomLookupTable<RandomState, RandomState> {
     pub fn empty_clone(&self) -> Self {
         let bits_per_entry = self.counters.bits_per_val();
         Self {
-            xors: vec![0; self.num_entries as usize],
+            data: vec![0; self.num_entries as usize],
             counters: ValueVec::new(bits_per_entry, self.num_entries as usize),
             num_entries: self.num_entries,
             num_hashes: self.num_hashes,
@@ -57,12 +57,12 @@ impl InvBloomLookupTable<RandomState, RandomState> {
         }
     }
 
-    pub fn xors(&self) -> &Vec<u32> {
-        &self.xors
+    pub fn data(&self) -> &Vec<u32> {
+        &self.data
     }
 
-    pub fn xors_mut(&mut self) -> &mut Vec<u32> {
-        &mut self.xors
+    pub fn data_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.data
     }
 
     pub fn counters(&self) -> &ValueVec {
@@ -98,7 +98,12 @@ impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
             }
             if cur < self.counters.max_value() {
                 self.counters.set(idx, cur + 1);
-                self.xors[idx] ^= item;
+                let difference = u32::MAX - self.data[idx];
+                if difference > *item {
+                    self.data[idx] += item;
+                } else {
+                    self.data[idx] = item - difference;
+                }
             } else {
                 panic!("counting bloom filter counter overflow");
             }
@@ -118,7 +123,11 @@ impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
                 panic!("item is not in the iblt");
             }
             self.counters.set(idx, cur - 1);
-            self.xors[idx] ^= item;
+            if self.data[idx] >= *item {
+                self.data[idx] -= item;
+            } else {
+                self.data[idx] = u32::MAX - (item - self.data[idx]);
+            }
         }
     }
 
@@ -162,7 +171,7 @@ impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
                 if self.counters.get(i) != 1 {
                     continue;
                 }
-                let item = self.xors[i];
+                let item = self.data[i];
                 self.remove(&item);
                 assert!(removed_set.insert(item));
                 removed = true;
@@ -193,8 +202,8 @@ mod tests {
         assert_eq!(iblt.num_entries(), 96);
         assert_eq!(iblt.num_hashes(), 2);
         assert_eq!(vvsum(iblt.counters()), 0);
-        assert_eq!(iblt.xors().iter().sum::<u32>(), 0);
-        assert_eq!(iblt.xors().len(), iblt.num_entries() as usize);
+        assert_eq!(iblt.data().iter().sum::<u32>(), 0);
+        assert_eq!(iblt.data().len(), iblt.num_entries() as usize);
     }
 
     #[test]
@@ -204,19 +213,19 @@ mod tests {
         let indexes = iblt.indexes(&elem);
         for &idx in &indexes {
             assert_eq!(iblt.counters().get(idx), 0);
-            assert_eq!(iblt.xors()[idx], 0);
+            assert_eq!(iblt.data()[idx], 0);
         }
         assert!(!iblt.insert(&elem), "element did not exist already");
         assert_eq!(vvsum(iblt.counters()), 1 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_ne!(iblt.xors()[idx], 0);
+            assert_ne!(iblt.data()[idx], 0);
         }
         assert!(iblt.insert(&elem), "added element twice: violates spec?");
         assert_eq!(vvsum(iblt.counters()), 2 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_eq!(iblt.xors()[idx], 0);
+            assert_eq!(iblt.data()[idx], 0);
         }
     }
 
@@ -228,8 +237,8 @@ mod tests {
         let iblt2 = iblt1.empty_clone();
         assert!(vvsum(iblt1.counters()) > 0);
         assert_eq!(vvsum(iblt2.counters()), 0);
-        assert!(iblt1.xors().iter().sum::<u32>() > 0);
-        assert_eq!(iblt2.xors().iter().sum::<u32>(), 0);
+        assert!(iblt1.data().iter().sum::<u32>() > 0);
+        assert_eq!(iblt2.data().iter().sum::<u32>(), 0);
         assert_eq!(iblt1.indexes(&1234), iblt2.indexes(&1234));
     }
 
