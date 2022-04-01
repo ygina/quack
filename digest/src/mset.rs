@@ -7,11 +7,10 @@ use rand::Rng;
 /// Incremental additive multiset hash.
 pub struct AdditiveMsetHash {
     hash: i64,
-    count: i64,
+    count: u32,
     nonce: u32,
 }
 
-const L: i64 = 51539607551;  // TODO: parameter
 const N: i64 = 51539607551;  // TODO: parameter
 fn hash_fn(bit: u32, val: u32) -> i64 {
     // TODO: non-identity hash function?
@@ -32,8 +31,8 @@ impl AdditiveMsetHash {
     pub fn add(&mut self, elem: u32) {
         let hash = hash_fn(1, elem);
         self.hash = (self.hash + hash) % N;
-        // TODO: do we need mod L? maybe we can just assume no overflow
-        self.count = (self.count + 1) % L;
+        // assume no overflow
+        self.count += 1;
     }
 
     /// Adds multiple elements to the digest.
@@ -42,7 +41,7 @@ impl AdditiveMsetHash {
             let hash = hash_fn(1, elem);
             self.hash = (self.hash + hash) % N;
         }
-        self.count = (self.count + (elems.len() as i64)) % L;
+        self.count += elems.len() as u32;
     }
 
     /// Returns the digest hash.
