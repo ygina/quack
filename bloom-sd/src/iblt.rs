@@ -221,11 +221,11 @@ mod tests {
             assert_ne!(iblt.counters().get(idx), 0);
             assert_ne!(iblt.data()[idx], 0);
         }
-        assert!(iblt.insert(&elem), "added element twice: violates spec?");
+        assert!(iblt.insert(&elem), "added element twice");
         assert_eq!(vvsum(iblt.counters()), 2 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_eq!(iblt.data()[idx], 0);
+            assert_ne!(iblt.data()[idx], 0);
         }
     }
 
