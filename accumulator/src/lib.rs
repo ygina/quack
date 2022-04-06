@@ -90,12 +90,14 @@ mod tests {
         base_accumulator_test(Box::new(accumulator), 100, 1, false);
     }
 
+    #[ignore]
     #[test]
     fn naive_two_dropped() {
         let accumulator = NaiveAccumulator::new();
         base_accumulator_test(Box::new(accumulator), 100, 2, false);
     }
 
+    #[ignore]
     #[test]
     fn naive_three_dropped() {
         let accumulator = NaiveAccumulator::new();
@@ -114,6 +116,7 @@ mod tests {
         base_accumulator_test(Box::new(accumulator), 100, 1, true);
     }
 
+    #[ignore]
     #[test]
     fn naive_one_malicious_and_many_dropped() {
         // validation takes much longer to fail because many
