@@ -71,7 +71,7 @@ fn main() {
     let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
     let t1 = Instant::now();
     while let Some(elem) = g.next() {
-        accumulator.process(elem);
+        accumulator.process(&elem);
     }
     let t2 = Instant::now();
     debug!("dropped {}/{} elements", g.num_dropped, g.num_logged);

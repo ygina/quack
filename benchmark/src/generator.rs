@@ -1,10 +1,11 @@
 use rand::{self, Rng};
+use num_bigint::{BigUint, ToBigUint};
 
-pub const MALICIOUS_ELEM: u32 = std::u32::MAX;
+pub const MALICIOUS_ELEM: u128 = u128::max_value();
 
 pub struct LoadGenerator {
     /// The logged packets. All elements are in the range [0, MALICIOUS_ELEM).
-    pub log: Vec<u32>,
+    pub log: Vec<BigUint>,
     /// Probability that a logged packet is dropped.
     p_dropped: f32,
     /// The index of the malicious packet, if the router is malicious
@@ -31,8 +32,12 @@ impl LoadGenerator {
     /// will generate all packets the ISP actually receives.
     pub fn new(num_logged: usize, p_dropped: f32, malicious: bool) -> Self {
         let mut rng = rand::thread_rng();
-        let log: Vec<u32> = (0..num_logged)
-            .map(|_| rng.gen_range(0..MALICIOUS_ELEM)).collect();
+        let log: Vec<BigUint> = (0..num_logged).map(|_| loop {
+            let elem = rng.gen::<u128>();
+            if elem != MALICIOUS_ELEM {
+                break elem.to_biguint().unwrap();
+            }
+        }).collect();
         let malicious_i: Option<usize> = if malicious {
             Some(rng.gen_range(0..num_logged))
         } else {
@@ -51,7 +56,7 @@ impl LoadGenerator {
 }
 
 impl Iterator for LoadGenerator {
-    type Item = u32;
+    type Item = BigUint;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -65,7 +70,7 @@ impl Iterator for LoadGenerator {
             // Send MALICIOUS_ELEM if we are on the malicious index
             if let Some(malicious_i) = self.malicious_i {
                 if malicious_i == self.index - 1 {
-                    return Some(MALICIOUS_ELEM);
+                    return Some(MALICIOUS_ELEM.to_biguint().unwrap());
                 }
             }
             // Continue until the packet is not dropped
@@ -73,7 +78,7 @@ impl Iterator for LoadGenerator {
             if dropped {
                 self.num_dropped += 1;
             } else {
-                return Some(self.log[self.index - 1]);
+                return Some(self.log[self.index - 1].clone());
             }
         }
     }
@@ -136,8 +141,8 @@ mod tests {
         assert_eq!(g.num_logged, NUM_LOGGED);
         assert!(g.num_dropped > 0); //with high probability
         assert_eq!(processed.len(), g.num_logged - g.num_dropped);
-        assert!(!g.log.contains(&MALICIOUS_ELEM));
-        assert!(processed.contains(&MALICIOUS_ELEM));
+        assert!(!g.log.contains(&MALICIOUS_ELEM.to_biguint().unwrap()));
+        assert!(processed.contains(&MALICIOUS_ELEM.to_biguint().unwrap()));
     }
 
     #[test]
