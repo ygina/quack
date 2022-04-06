@@ -1,5 +1,7 @@
 use std::time::Instant;
 use std::collections::HashMap;
+use num_bigint::BigUint;
+use num_traits::Zero;
 use bloom_sd::InvBloomLookupTable;
 use crate::Accumulator;
 use digest::Digest;
@@ -32,12 +34,15 @@ pub struct IBLTAccumulator {
 }
 
 // TODO: IBLT parameters
+// TODO: may also want to map IBLT entries to u32 with DJB hash
+const LOG_DATA_LENGTH: u32 = 128;
 const BITS_PER_ENTRY: usize = 16;
 const FALSE_POSITIVE_RATE: f32 = 0.0001;
 
 impl IBLTAccumulator {
     pub fn new(threshold: usize) -> Self {
         let iblt = InvBloomLookupTable::with_rate(
+            LOG_DATA_LENGTH,
             BITS_PER_ENTRY,
             FALSE_POSITIVE_RATE,
             threshold.try_into().unwrap(),
@@ -56,6 +61,7 @@ impl IBLTAccumulator {
 
     pub fn new_with_rate(threshold: usize, fp_rate: f32) -> Self {
         let iblt = InvBloomLookupTable::with_rate(
+            LOG_DATA_LENGTH,
             BITS_PER_ENTRY,
             fp_rate,
             threshold.try_into().unwrap(),
@@ -74,14 +80,14 @@ impl IBLTAccumulator {
 }
 
 impl Accumulator for IBLTAccumulator {
-    fn process(&mut self, elem: u32) {
+    fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
-        self.iblt.insert(&elem);
+        self.iblt.insert(elem);
     }
 
-    fn process_batch(&mut self, elems: &Vec<u32>) {
-        for &elem in elems {
+    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+        for elem in elems {
             self.process(elem);
         }
     }
@@ -90,7 +96,7 @@ impl Accumulator for IBLTAccumulator {
         self.num_elems
     }
 
-    fn validate(&self, elems: &Vec<u32>) -> bool {
+    fn validate(&self, elems: &Vec<BigUint>) -> bool {
         let t1 = Instant::now();
         if elems.len() < self.total() {
             warn!("more elements received than logged");
@@ -101,15 +107,15 @@ impl Accumulator for IBLTAccumulator {
         let n_dropped = elems.len() - self.total();
         if n_dropped == 0 {
             let mut digest = Digest::new();
-            for &elem in elems {
+            for elem in elems {
                 digest.add(elem);
             }
             return digest.equals(&self.digest);
         }
 
         let mut iblt = self.iblt.empty_clone();
-        for &elem in elems {
-            iblt.insert(&elem);
+        for elem in elems {
+            iblt.insert(elem);
         }
         for i in 0..(iblt.num_entries() as usize) {
             let processed_count = iblt.counters().get(i);
@@ -123,14 +129,14 @@ impl Accumulator for IBLTAccumulator {
             iblt.counters_mut().set(i, difference_count);
 
             // Additionally set the data value
-            let processed_data = iblt.data()[i];
-            let received_data = self.iblt.data()[i];
+            let processed_data = &iblt.data()[i];
+            let received_data = &self.iblt.data()[i];
             let difference_data = if processed_data >= received_data {
                 processed_data - received_data
             } else {
-                (u32::MAX - received_data) + processed_data
+                (u128::MAX - received_data) + processed_data
             };
-            if difference_count == 0 && difference_data != 0 {
+            if difference_count == 0 && !difference_data.is_zero() {
                 return false;
             }
             iblt.data_mut()[i] = difference_data;
@@ -157,7 +163,7 @@ impl Accumulator for IBLTAccumulator {
             let mut digest = Digest::new();
             for elem in elems {
                 if !removed.remove(elem) {
-                    digest.add(*elem);
+                    digest.add(elem);
                 }
             }
             assert!(digest.equals(&self.digest));
@@ -215,9 +221,9 @@ impl Accumulator for IBLTAccumulator {
         if err == 0 {
             // TODO: verify the XORs check out when removing these elements
             // from the difference IBLT?
-            let mut dropped_count: HashMap<u32, usize> = HashMap::new();
+            let mut dropped_count: HashMap<BigUint, usize> = HashMap::new();
             for dropped_i in dropped {
-                let elem = elems[elems_i[dropped_i]];
+                let elem = elems[elems_i[dropped_i]].clone();
                 *(dropped_count.entry(elem).or_insert(0)) += 1;
             }
             for elem in removed {

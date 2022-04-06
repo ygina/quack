@@ -1,5 +1,6 @@
 use std::time::Instant;
 use itertools::Itertools;
+use num_bigint::BigUint;
 use crate::Accumulator;
 use digest::Digest;
 
@@ -26,13 +27,13 @@ impl NaiveAccumulator {
 }
 
 impl Accumulator for NaiveAccumulator {
-    fn process(&mut self, elem: u32) {
+    fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
     }
 
-    fn process_batch(&mut self, elems: &Vec<u32>) {
-        for &elem in elems {
+    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+        for elem in elems {
             self.process(elem);
         }
     }
@@ -41,7 +42,7 @@ impl Accumulator for NaiveAccumulator {
         self.num_elems
     }
 
-    fn validate(&self, elems: &Vec<u32>) -> bool {
+    fn validate(&self, elems: &Vec<BigUint>) -> bool {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
                 .combinations(self.num_elems).enumerate() {
@@ -49,7 +50,7 @@ impl Accumulator for NaiveAccumulator {
             // We could amortize digest calculation using the previous digest,
             // but it's still exponential in the number of subsets
             for index in combination {
-                digest.add(elems[index]);
+                digest.add(&elems[index]);
             }
             if digest.equals(&self.digest) {
                 return true;

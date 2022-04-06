@@ -7,6 +7,7 @@ mod naive;
 mod power_sum;
 
 use std::collections::HashMap;
+use num_bigint::BigUint;
 use digest::Digest;
 
 pub use cbf::CBFAccumulator;
@@ -16,28 +17,28 @@ pub use power_sum::PowerSumAccumulator;
 
 pub trait Accumulator {
     /// Process a single element.
-    fn process(&mut self, elem: u32);
+    fn process(&mut self, elem: &BigUint);
     /// Process a batch of elements.
-    fn process_batch(&mut self, elems: &Vec<u32>);
+    fn process_batch(&mut self, elems: &Vec<BigUint>);
     /// The total number of processed elements.
     fn total(&self) -> usize;
     /// Validate the accumulator against a list of elements.
     ///
     /// The accumulator is valid if the elements that the accumulator has
     /// processed are a subset of the provided list of elements.
-    fn validate(&self, elems: &Vec<u32>) -> bool;
+    fn validate(&self, elems: &Vec<BigUint>) -> bool;
 }
 
 fn check_digest(
-    elems: &Vec<u32>,
-    mut dropped_count: HashMap<u32, usize>,
+    elems: &Vec<BigUint>,
+    mut dropped_count: HashMap<BigUint, usize>,
     expected: &Digest,
 ) -> bool {
     let mut digest = Digest::new();
-    for &elem in elems {
-        if let Some(count) = dropped_count.remove(&elem) {
+    for elem in elems {
+        if let Some(count) = dropped_count.remove(elem) {
             if count > 0 {
-                dropped_count.insert(elem, count - 1);
+                dropped_count.insert(elem.clone(), count - 1);
             }
         } else {
             digest.add(elem);
@@ -50,9 +51,10 @@ fn check_digest(
 mod tests {
     use rand;
     use rand::Rng;
+    use num_bigint::{BigUint, ToBigUint};
     use super::*;
 
-    const MALICIOUS_ELEM: u32 = std::u32::MAX;
+    const MALICIOUS_ELEM: u128 = u128::max_value();
 
     fn base_accumulator_test(
         mut accumulator: Box<dyn Accumulator>,
@@ -61,17 +63,21 @@ mod tests {
         malicious: bool,
     ) {
         let mut rng = rand::thread_rng();
-        let elems: Vec<u32> = (0..num_logged)
-            .map(|_| rng.gen_range(0..MALICIOUS_ELEM)).collect();
+        let elems: Vec<BigUint> = (0..num_logged).map(|_| loop {
+            let elem = rng.gen::<u128>();
+            if elem != MALICIOUS_ELEM {
+                break elem.to_biguint().unwrap();
+            }
+        }).collect();
         // indexes may be repeated but it's close enough
         let dropped_is: Vec<usize> = (0..num_dropped)
             .map(|_| rng.gen_range(0..num_logged)).collect();
         let malicious_i: usize = rng.gen_range(0..num_logged);
         for i in 0..elems.len() {
             if malicious && malicious_i == i {
-                accumulator.process(MALICIOUS_ELEM);
+                accumulator.process(&MALICIOUS_ELEM.to_biguint().unwrap());
             } else if !dropped_is.contains(&i) {
-                accumulator.process(elems[i]);
+                accumulator.process(&elems[i]);
             }
         }
         let valid = accumulator.validate(&elems);

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::time::Instant;
+use num_bigint::BigUint;
 use bloom_sd::CountingBloomFilter;
 use crate::Accumulator;
 use digest::Digest;
@@ -50,14 +51,14 @@ impl CBFAccumulator {
 }
 
 impl Accumulator for CBFAccumulator {
-    fn process(&mut self, elem: u32) {
+    fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
         self.cbf.insert(&elem);
     }
 
-    fn process_batch(&mut self, elems: &Vec<u32>) {
-        for &elem in elems {
+    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+        for elem in elems {
             self.process(elem);
         }
     }
@@ -66,7 +67,7 @@ impl Accumulator for CBFAccumulator {
         self.num_elems
     }
 
-    fn validate(&self, elems: &Vec<u32>) -> bool {
+    fn validate(&self, elems: &Vec<BigUint>) -> bool {
         let t1 = Instant::now();
         if elems.len() < self.total() {
             warn!("more elements received than logged");
@@ -77,7 +78,7 @@ impl Accumulator for CBFAccumulator {
         let n_dropped = elems.len() - self.total();
         if n_dropped == 0 {
             let mut digest = Digest::new();
-            for &elem in elems {
+            for elem in elems {
                 digest.add(elem);
             }
             return digest.equals(&self.digest);
@@ -85,8 +86,8 @@ impl Accumulator for CBFAccumulator {
 
         // Calculate the difference CBF.
         let mut cbf = self.cbf.empty_clone();
-        for &elem in elems {
-            cbf.insert(&elem);
+        for elem in elems {
+            cbf.insert(elem);
         }
         for i in 0..(cbf.num_entries() as usize) {
             let processed_count = cbf.counters().get(i);
@@ -149,10 +150,10 @@ impl Accumulator for CBFAccumulator {
         let t4 = Instant::now();
         debug!("solved ILP: {:?}", t4 - t3);
         if err == 0 {
-            let mut dropped_count: HashMap<u32, usize> = HashMap::new();
+            let mut dropped_count: HashMap<BigUint, usize> = HashMap::new();
             for dropped_i in dropped {
-                let elem = elems[elems_i[dropped_i]];
-                let count = dropped_count.entry(elem).or_insert(0);
+                let elem = &elems[elems_i[dropped_i]];
+                let count = dropped_count.entry(elem.clone()).or_insert(0);
                 *count += 1;
             }
             crate::check_digest(elems, dropped_count, &self.digest)

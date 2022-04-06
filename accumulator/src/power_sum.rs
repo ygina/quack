@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
+use std::hash::Hasher;
 use std::time::Instant;
 
+use djb_hash::{HasherU32, x33a_u32::*};
+use num_bigint::BigUint;
 use tokio::task;
 use tokio::runtime::Builder;
 use crate::Accumulator;
@@ -39,6 +42,12 @@ extern "C" {
         field: i64,
         degree: usize,
     ) -> i32;
+}
+
+fn elem_to_u32(elem: &BigUint) -> u32 {
+    let mut hasher = X33aU32::new();
+    hasher.write(&elem.to_bytes_be());
+    hasher.finish_u32()
 }
 
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
@@ -224,18 +233,18 @@ impl PowerSumAccumulator {
 }
 
 impl Accumulator for PowerSumAccumulator {
-    fn process(&mut self, elem: u32) {
+    fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
         let mut value: i64 = 1;
         for i in 0..self.power_sums.len() {
-            value = mul_and_mod(value, elem as i64, LARGE_PRIME);
+            value = mul_and_mod(value, elem_to_u32(elem) as _, LARGE_PRIME);
             self.power_sums[i] = (self.power_sums[i] + value) % LARGE_PRIME;
         }
     }
 
-    fn process_batch(&mut self, elems: &Vec<u32>) {
-        for &elem in elems {
+    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+        for elem in elems {
             self.process(elem);
         }
     }
@@ -244,7 +253,7 @@ impl Accumulator for PowerSumAccumulator {
         self.num_elems
     }
 
-    fn validate(&self, elems: &Vec<u32>) -> bool {
+    fn validate(&self, elems: &Vec<BigUint>) -> bool {
         // The number of power sum equations we need is equal to
         // the number of lost elements. Validation cannot be performed
         // if this number exceeds the threshold.
@@ -261,7 +270,7 @@ impl Accumulator for PowerSumAccumulator {
         // If no elements are missing, just recalculate the digest.
         if n_values == 0 {
             let mut digest = Digest::new();
-            for &elem in elems {
+            for elem in elems {
                 digest.add(elem);
             }
             return digest.equals(&self.digest);
@@ -271,8 +280,10 @@ impl Accumulator for PowerSumAccumulator {
         // Find the difference with the power sums of the processed elements.
         let t1 = Instant::now();
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();
+        let elems_u32: Vec<u32> =
+            elems.iter().map(|elem| elem_to_u32(elem)).collect();
         let power_sums = rt.block_on(async {
-            calculate_power_sums(elems, n_values).await
+            calculate_power_sums(&elems_u32, n_values).await
         });
         let t2 = Instant::now();
         debug!("calculated power sums: {:?}", t2 - t1);
@@ -311,7 +322,23 @@ impl Accumulator for PowerSumAccumulator {
             let count = dropped_count.entry(root.unwrap()).or_insert(0);
             *count += 1;
         }
-        let res = crate::check_digest(elems, dropped_count, &self.digest);
+
+        let mut digest = Digest::new();
+        let mut collisions = HashSet::new();
+        for elem in elems {
+            let elem_u32 = elem_to_u32(elem);
+            if !collisions.insert(elem_u32) {
+                panic!("not handling djb collisions");
+            }
+            if let Some(count) = dropped_count.remove(&elem_u32) {
+                if count > 0 {
+                    dropped_count.insert(elem_u32, count - 1);
+                }
+            } else {
+                digest.add(elem);
+            }
+        }
+        let res = digest.equals(&self.digest);
         let t6 = Instant::now();
         debug!("recalculated digest: {:?}", t6 - t5);
         res
