@@ -1,4 +1,5 @@
 mod hashing;
+mod valuevec;
 mod cbf;
 mod iblt;
 

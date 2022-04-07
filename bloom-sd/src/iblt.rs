@@ -2,10 +2,11 @@ use std::collections::HashSet;
 
 use rand;
 use rand::Rng;
-use bloom::valuevec::ValueVec;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::{One, Zero};
 use siphasher::sip128::SipHasher13;
+
+use crate::valuevec::ValueVec;
 use crate::hashing::HashIter;
 
 /// TODO: Fatally, assumes inserted elements are unique.

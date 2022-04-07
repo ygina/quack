@@ -4,7 +4,8 @@ use rand;
 use rand::Rng;
 use std::hash::Hash;
 use siphasher::sip128::SipHasher13;
-use bloom::valuevec::ValueVec;
+
+use crate::valuevec::ValueVec;
 use crate::hashing::HashIter;
 
 pub struct CountingBloomFilter {
