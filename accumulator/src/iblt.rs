@@ -79,7 +79,7 @@ impl IBLTAccumulator {
     }
 
     /// Deserialize the accumulator into bytes.
-    pub fn deserialize(bytes: Vec<u8>) -> Self {
+    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
         unimplemented!()
     }
 
@@ -89,7 +89,7 @@ impl IBLTAccumulator {
 }
 
 impl Accumulator for IBLTAccumulator {
-    fn serialize(&self) -> Vec<u8> {
+    fn serialize_bytes(&self) -> Vec<u8> {
         unimplemented!()
     }
 
@@ -272,16 +272,16 @@ mod tests {
     #[test]
     fn empty_serialization() {
         let acc1 = IBLTAccumulator::new(1000);
-        let acc2 = IBLTAccumulator::deserialize(acc1.serialize());
+        let acc2 = IBLTAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert!(acc1.equals(&acc2));
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = IBLTAccumulator::new(1000);
-        let acc2 = IBLTAccumulator::deserialize(acc1.serialize());
+        let acc2 = IBLTAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         acc1.process_batch(&gen_elems(10));
-        let acc3 = IBLTAccumulator::deserialize(acc1.serialize());
+        let acc3 = IBLTAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert!(!acc1.equals(&acc2));
         assert!(acc1.equals(&acc3));
     }

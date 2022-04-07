@@ -1,6 +1,9 @@
 use std::time::Instant;
+use bincode;
 use itertools::Itertools;
 use num_bigint::BigUint;
+use serde::{Serialize, Deserialize};
+
 use crate::Accumulator;
 use digest::Digest;
 
@@ -12,7 +15,7 @@ use digest::Digest;
 /// elements. The log is valid if and only if any of the digests computed
 /// from these subsets are equal to the existing digest. This approach
 /// is exponential in the number of processed elements.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NaiveAccumulator {
     digest: Digest,
     num_elems: usize,
@@ -27,14 +30,14 @@ impl NaiveAccumulator {
     }
 
     /// Deserialize the accumulator into bytes.
-    pub fn deserialize(bytes: Vec<u8>) -> Self {
-        unimplemented!()
+    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
+        bincode::deserialize(bytes).unwrap()
     }
 }
 
 impl Accumulator for NaiveAccumulator {
-    fn serialize(&self) -> Vec<u8> {
-        unimplemented!()
+    fn serialize_bytes(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
     }
 
     fn process(&mut self, elem: &BigUint) {
@@ -95,16 +98,16 @@ mod tests {
     #[test]
     fn empty_serialization() {
         let acc1 = NaiveAccumulator::new();
-        let acc2 = NaiveAccumulator::deserialize(acc1.serialize());
+        let acc2 = NaiveAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert_eq!(acc1, acc2);
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = NaiveAccumulator::new();
-        let acc2 = NaiveAccumulator::deserialize(acc1.serialize());
+        let acc2 = NaiveAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         acc1.process_batch(&gen_elems(10));
-        let acc3 = NaiveAccumulator::deserialize(acc1.serialize());
+        let acc3 = NaiveAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert_ne!(acc1, acc2);
         assert_eq!(acc1, acc3);
     }

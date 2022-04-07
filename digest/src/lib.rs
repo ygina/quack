@@ -12,3 +12,20 @@ pub type Digest = AdditiveMsetHash;
 
 pub use xor::XorDigest;
 pub use mset::AdditiveMsetHash;
+
+use num_bigint::BigUint;
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "BigUint")]
+struct BigUintDef {
+    #[serde(getter = "BigUint::to_bytes_be")]
+    bytes_be: Vec<u8>,
+}
+
+// Provide a conversion to construct the remote type.
+impl From<BigUintDef> for BigUint {
+    fn from(def: BigUintDef) -> BigUint {
+        BigUint::from_bytes_be(&def.bytes_be)
+    }
+}

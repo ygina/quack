@@ -233,13 +233,13 @@ impl PowerSumAccumulator {
     }
 
     /// Deserialize the accumulator into bytes.
-    pub fn deserialize(bytes: Vec<u8>) -> Self {
+    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
         unimplemented!()
     }
 }
 
 impl Accumulator for PowerSumAccumulator {
-    fn serialize(&self) -> Vec<u8> {
+    fn serialize_bytes(&self) -> Vec<u8> {
         unimplemented!()
     }
 
@@ -377,16 +377,16 @@ mod test {
     #[test]
     fn empty_serialization() {
         let acc1 = PowerSumAccumulator::new(100);
-        let acc2 = PowerSumAccumulator::deserialize(acc1.serialize());
+        let acc2 = PowerSumAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert_eq!(acc1, acc2);
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = PowerSumAccumulator::new(100);
-        let acc2 = PowerSumAccumulator::deserialize(acc1.serialize());
+        let acc2 = PowerSumAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         acc1.process_batch(&gen_elems(10));
-        let acc3 = PowerSumAccumulator::deserialize(acc1.serialize());
+        let acc3 = PowerSumAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert_ne!(acc1, acc2);
         assert_eq!(acc1, acc3);
     }

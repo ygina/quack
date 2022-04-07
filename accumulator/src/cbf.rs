@@ -50,7 +50,7 @@ impl CBFAccumulator {
     }
 
     /// Deserialize the accumulator into bytes.
-    pub fn deserialize(bytes: Vec<u8>) -> Self {
+    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
         unimplemented!()
     }
 
@@ -60,7 +60,7 @@ impl CBFAccumulator {
 }
 
 impl Accumulator for CBFAccumulator {
-    fn serialize(&self) -> Vec<u8> {
+    fn serialize_bytes(&self) -> Vec<u8> {
         unimplemented!()
     }
 
@@ -199,16 +199,16 @@ mod tests {
     #[test]
     fn empty_serialization() {
         let acc1 = CBFAccumulator::new(1000);
-        let acc2 = CBFAccumulator::deserialize(acc1.serialize());
+        let acc2 = CBFAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert!(acc1.equals(&acc2));
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = CBFAccumulator::new(1000);
-        let acc2 = CBFAccumulator::deserialize(acc1.serialize());
+        let acc2 = CBFAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         acc1.process_batch(&gen_elems(10));
-        let acc3 = CBFAccumulator::deserialize(acc1.serialize());
+        let acc3 = CBFAccumulator::deserialize_bytes(&acc1.serialize_bytes());
         assert!(!acc1.equals(&acc2));
         assert!(acc1.equals(&acc3));
     }

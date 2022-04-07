@@ -4,13 +4,17 @@
 use rand;
 use rand::Rng;
 use num_bigint::{BigUint, ToBigUint};
+use serde::{Serialize, Deserialize};
 use sha3::{Digest, Sha3_256};
+use crate::BigUintDef;
 
 /// Incremental additive multiset hash.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdditiveMsetHash {
+    #[serde(with = "BigUintDef")]
     hash: BigUint,
     count: u32,
+    #[serde(with = "BigUintDef")]
     nonce: BigUint,
 }
 
