@@ -7,6 +7,7 @@ use num_bigint::{BigUint, ToBigUint};
 use sha3::{Digest, Sha3_256};
 
 /// Incremental additive multiset hash.
+#[derive(Debug, PartialEq, Eq)]
 pub struct AdditiveMsetHash {
     hash: BigUint,
     count: u32,

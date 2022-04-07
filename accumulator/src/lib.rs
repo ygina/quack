@@ -16,6 +16,8 @@ pub use naive::NaiveAccumulator;
 pub use power_sum::PowerSumAccumulator;
 
 pub trait Accumulator {
+    /// Serialize the accumulator into bytes.
+    fn serialize(&self) -> Vec<u8>;
     /// Process a single element.
     fn process(&mut self, elem: &BigUint);
     /// Process a batch of elements.

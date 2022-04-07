@@ -84,6 +84,10 @@ impl InvBloomLookupTable<RandomState, RandomState> {
     pub fn num_hashes(&self) -> u32 {
         self.num_hashes
     }
+
+    pub fn equals(&self, other: &Self) -> bool {
+        unimplemented!()
+    }
 }
 
 impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
@@ -209,6 +213,20 @@ mod tests {
         assert_eq!(vvsum(iblt.counters()), 0);
         assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
         assert_eq!(iblt.data().len(), iblt.num_entries() as usize);
+    }
+
+    #[test]
+    fn test_equals() {
+        let mut iblt1 = init_iblt();
+        let iblt2 = init_iblt();
+        assert!(!iblt1.equals(&iblt2), "different random state");
+        let iblt3 = iblt1.empty_clone();
+        assert!(iblt1.equals(&iblt3), "empty clone duplicates random state");
+        iblt1.insert(&1234_u32.to_biguint().unwrap());
+        let iblt4 = iblt1.empty_clone();
+        assert!(!iblt1.equals(&iblt4), "empty clone removes data");
+        assert!(iblt1.equals(&iblt1), "reflexive equality");
+        assert!(iblt2.equals(&iblt2), "reflexive equality");
     }
 
     #[test]

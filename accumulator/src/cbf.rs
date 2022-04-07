@@ -48,9 +48,22 @@ impl CBFAccumulator {
             ),
         }
     }
+
+    /// Deserialize the accumulator into bytes.
+    pub fn deserialize(bytes: Vec<u8>) -> Self {
+        unimplemented!()
+    }
+
+    pub fn equals(&self, other: &Self) -> bool {
+        unimplemented!()
+    }
 }
 
 impl Accumulator for CBFAccumulator {
+    fn serialize(&self) -> Vec<u8> {
+        unimplemented!()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -161,5 +174,42 @@ impl Accumulator for CBFAccumulator {
             warn!("ILP solving error: {}", err);
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand;
+    use rand::Rng;
+    use num_bigint::ToBigUint;
+
+    fn gen_elems(n: usize) -> Vec<BigUint> {
+        let mut rng = rand::thread_rng();
+        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+    }
+
+    #[test]
+    fn test_not_equals() {
+        let acc1 = CBFAccumulator::new(100);
+        let acc2 = CBFAccumulator::new(100);
+        assert!(!acc1.equals(&acc2), "different digest nonce");
+    }
+
+    #[test]
+    fn empty_serialization() {
+        let acc1 = CBFAccumulator::new(1000);
+        let acc2 = CBFAccumulator::deserialize(acc1.serialize());
+        assert!(acc1.equals(&acc2));
+    }
+
+    #[test]
+    fn serialization_with_data() {
+        let mut acc1 = CBFAccumulator::new(1000);
+        let acc2 = CBFAccumulator::deserialize(acc1.serialize());
+        acc1.process_batch(&gen_elems(10));
+        let acc3 = CBFAccumulator::deserialize(acc1.serialize());
+        assert!(!acc1.equals(&acc2));
+        assert!(acc1.equals(&acc3));
     }
 }

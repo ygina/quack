@@ -12,6 +12,7 @@ use digest::Digest;
 /// elements. The log is valid if and only if any of the digests computed
 /// from these subsets are equal to the existing digest. This approach
 /// is exponential in the number of processed elements.
+#[derive(Debug, PartialEq, Eq)]
 pub struct NaiveAccumulator {
     digest: Digest,
     num_elems: usize,
@@ -24,9 +25,18 @@ impl NaiveAccumulator {
             num_elems: 0,
         }
     }
+
+    /// Deserialize the accumulator into bytes.
+    pub fn deserialize(bytes: Vec<u8>) -> Self {
+        unimplemented!()
+    }
 }
 
 impl Accumulator for NaiveAccumulator {
+    fn serialize(&self) -> Vec<u8> {
+        unimplemented!()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -60,5 +70,42 @@ impl Accumulator for NaiveAccumulator {
             }
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand;
+    use rand::Rng;
+    use num_bigint::ToBigUint;
+
+    fn gen_elems(n: usize) -> Vec<BigUint> {
+        let mut rng = rand::thread_rng();
+        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+    }
+
+    #[test]
+    fn test_not_equals() {
+        let acc1 = NaiveAccumulator::new();
+        let acc2 = NaiveAccumulator::new();
+        assert_ne!(acc1, acc2, "different digest nonce");
+    }
+
+    #[test]
+    fn empty_serialization() {
+        let acc1 = NaiveAccumulator::new();
+        let acc2 = NaiveAccumulator::deserialize(acc1.serialize());
+        assert_eq!(acc1, acc2);
+    }
+
+    #[test]
+    fn serialization_with_data() {
+        let mut acc1 = NaiveAccumulator::new();
+        let acc2 = NaiveAccumulator::deserialize(acc1.serialize());
+        acc1.process_batch(&gen_elems(10));
+        let acc3 = NaiveAccumulator::deserialize(acc1.serialize());
+        assert_ne!(acc1, acc2);
+        assert_eq!(acc1, acc3);
     }
 }

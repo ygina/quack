@@ -64,6 +64,10 @@ impl CountingBloomFilter<RandomState, RandomState> {
     pub fn num_hashes(&self) -> u32 {
         self.num_hashes
     }
+
+    pub fn equals(&self, other: &Self) -> bool {
+        unimplemented!()
+    }
 }
 
 impl<R,S> CountingBloomFilter<R,S> where R: BuildHasher, S: BuildHasher {
@@ -143,6 +147,20 @@ mod tests {
         let cbf1 = init_cbf();
         let cbf2 = init_cbf();
         assert_ne!(cbf1.indexes(&1234), cbf2.indexes(&1234));
+    }
+
+    #[test]
+    fn test_equals() {
+        let mut cbf1 = init_cbf();
+        let cbf2 = init_cbf();
+        assert!(!cbf1.equals(&cbf2), "different random state");
+        let cbf3 = cbf1.empty_clone();
+        assert!(cbf1.equals(&cbf3), "empty clone duplicates random state");
+        cbf1.insert(&1234);
+        let cbf4 = cbf1.empty_clone();
+        assert!(!cbf1.equals(&cbf4), "empty clone removes data");
+        assert!(cbf1.equals(&cbf1), "reflexive equality");
+        assert!(cbf2.equals(&cbf2), "reflexive equality");
     }
 
     #[test]

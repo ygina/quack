@@ -28,6 +28,7 @@ const LARGE_PRIME: i64 = 51539607551;
 /// Note that validation cannot be  performed if the number of lost elements
 /// exceeds the threshold. All calculations are done in a finite field, modulo
 /// some 2^32 < large prime < 2^64 (the range of possible elements).
+#[derive(Debug, PartialEq, Eq)]
 pub struct PowerSumAccumulator {
     digest: Digest,
     num_elems: usize,
@@ -230,9 +231,18 @@ impl PowerSumAccumulator {
             power_sums: (0..threshold).map(|_| 0).collect(),
         }
     }
+
+    /// Deserialize the accumulator into bytes.
+    pub fn deserialize(bytes: Vec<u8>) -> Self {
+        unimplemented!()
+    }
 }
 
 impl Accumulator for PowerSumAccumulator {
+    fn serialize(&self) -> Vec<u8> {
+        unimplemented!()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -348,6 +358,38 @@ impl Accumulator for PowerSumAccumulator {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand;
+    use rand::Rng;
+    use num_bigint::ToBigUint;
+
+    fn gen_elems(n: usize) -> Vec<BigUint> {
+        let mut rng = rand::thread_rng();
+        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+    }
+
+    #[test]
+    fn test_not_equals() {
+        let acc1 = PowerSumAccumulator::new(100);
+        let acc2 = PowerSumAccumulator::new(100);
+        assert_ne!(acc1, acc2, "different digest nonce");
+    }
+
+    #[test]
+    fn empty_serialization() {
+        let acc1 = PowerSumAccumulator::new(100);
+        let acc2 = PowerSumAccumulator::deserialize(acc1.serialize());
+        assert_eq!(acc1, acc2);
+    }
+
+    #[test]
+    fn serialization_with_data() {
+        let mut acc1 = PowerSumAccumulator::new(100);
+        let acc2 = PowerSumAccumulator::deserialize(acc1.serialize());
+        acc1.process_batch(&gen_elems(10));
+        let acc3 = PowerSumAccumulator::deserialize(acc1.serialize());
+        assert_ne!(acc1, acc2);
+        assert_eq!(acc1, acc3);
+    }
 
     #[test]
     fn test_mul_and_mod() {
