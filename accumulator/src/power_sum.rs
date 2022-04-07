@@ -2,7 +2,6 @@ use std::collections::{HashSet, HashMap};
 use std::hash::Hasher;
 use std::time::Instant;
 
-use bincode;
 use serde::{Serialize, Deserialize};
 use djb_hash::{HasherU32, x33a_u32::*};
 use num_bigint::BigUint;
@@ -233,18 +232,9 @@ impl PowerSumAccumulator {
             power_sums: (0..threshold).map(|_| 0).collect(),
         }
     }
-
-    /// Deserialize the accumulator into bytes.
-    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
-        bincode::deserialize(bytes).unwrap()
-    }
 }
 
 impl Accumulator for PowerSumAccumulator {
-    fn serialize_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
-    }
-
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -360,6 +350,7 @@ impl Accumulator for PowerSumAccumulator {
 #[cfg(test)]
 mod test {
     use super::*;
+    use bincode;
     use rand;
     use rand::Rng;
     use num_bigint::ToBigUint;
@@ -379,16 +370,19 @@ mod test {
     #[test]
     fn empty_serialization() {
         let acc1 = PowerSumAccumulator::new(100);
-        let acc2 = PowerSumAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
         assert_eq!(acc1, acc2);
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = PowerSumAccumulator::new(100);
-        let acc2 = PowerSumAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));
-        let acc3 = PowerSumAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc3: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
         assert_ne!(acc1, acc2);
         assert_eq!(acc1, acc3);
     }

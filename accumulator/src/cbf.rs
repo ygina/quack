@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
+
 use num_bigint::BigUint;
+use serde::{Serialize, Deserialize};
 use bloom_sd::CountingBloomFilter;
 use crate::Accumulator;
 use digest::Digest;
@@ -26,6 +28,7 @@ extern "C" {
 /// represents all lost elements. If there is a subset of given elements that
 /// produces the same CBF, we can say with high probability the log is good.
 /// The count may be stored modulo some number.
+#[derive(Serialize, Deserialize)]
 pub struct CBFAccumulator {
     digest: Digest,
     num_elems: usize,
@@ -49,21 +52,14 @@ impl CBFAccumulator {
         }
     }
 
-    /// Deserialize the accumulator into bytes.
-    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
-        unimplemented!()
-    }
-
     pub fn equals(&self, other: &Self) -> bool {
-        unimplemented!()
+        self.digest == other.digest
+            && self.num_elems == other.num_elems
+            && self.cbf.equals(&other.cbf)
     }
 }
 
 impl Accumulator for CBFAccumulator {
-    fn serialize_bytes(&self) -> Vec<u8> {
-        unimplemented!()
-    }
-
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -180,6 +176,7 @@ impl Accumulator for CBFAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode;
     use rand;
     use rand::Rng;
     use num_bigint::ToBigUint;
@@ -199,16 +196,19 @@ mod tests {
     #[test]
     fn empty_serialization() {
         let acc1 = CBFAccumulator::new(1000);
-        let acc2 = CBFAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: CBFAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(acc1.equals(&acc2));
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = CBFAccumulator::new(1000);
-        let acc2 = CBFAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: CBFAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));
-        let acc3 = CBFAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc3: CBFAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(!acc1.equals(&acc2));
         assert!(acc1.equals(&acc3));
     }

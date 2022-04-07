@@ -1,5 +1,4 @@
 use std::time::Instant;
-use bincode;
 use itertools::Itertools;
 use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
@@ -28,18 +27,9 @@ impl NaiveAccumulator {
             num_elems: 0,
         }
     }
-
-    /// Deserialize the accumulator into bytes.
-    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
-        bincode::deserialize(bytes).unwrap()
-    }
 }
 
 impl Accumulator for NaiveAccumulator {
-    fn serialize_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
-    }
-
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -79,6 +69,7 @@ impl Accumulator for NaiveAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode;
     use rand;
     use rand::Rng;
     use num_bigint::ToBigUint;
@@ -98,16 +89,19 @@ mod tests {
     #[test]
     fn empty_serialization() {
         let acc1 = NaiveAccumulator::new();
-        let acc2 = NaiveAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: NaiveAccumulator = bincode::deserialize(&bytes).unwrap();
         assert_eq!(acc1, acc2);
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = NaiveAccumulator::new();
-        let acc2 = NaiveAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: NaiveAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));
-        let acc3 = NaiveAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc3: NaiveAccumulator = bincode::deserialize(&bytes).unwrap();
         assert_ne!(acc1, acc2);
         assert_eq!(acc1, acc3);
     }

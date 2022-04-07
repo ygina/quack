@@ -1,7 +1,9 @@
 use std::time::Instant;
 use std::collections::HashSet;
+
 use num_bigint::BigUint;
 use num_traits::Zero;
+use serde::{Serialize, Deserialize};
 use bloom_sd::InvBloomLookupTable;
 use crate::Accumulator;
 use digest::Digest;
@@ -27,6 +29,7 @@ extern "C" {
 /// represents all lost elements. If there is a subset of given elements that
 /// produces the same IBLT, we can say with high probability the log is good.
 /// The count may be stored modulo some number.
+#[derive(Serialize, Deserialize)]
 pub struct IBLTAccumulator {
     digest: Digest,
     num_elems: usize,
@@ -75,21 +78,14 @@ impl IBLTAccumulator {
         }
     }
 
-    /// Deserialize the accumulator into bytes.
-    pub fn deserialize_bytes(bytes: &[u8]) -> Self {
-        unimplemented!()
-    }
-
     pub fn equals(&self, other: &Self) -> bool {
-        unimplemented!()
+        self.digest == other.digest
+            && self.num_elems == other.num_elems
+            && self.iblt.equals(&other.iblt)
     }
 }
 
 impl Accumulator for IBLTAccumulator {
-    fn serialize_bytes(&self) -> Vec<u8> {
-        unimplemented!()
-    }
-
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;
@@ -259,6 +255,7 @@ impl Accumulator for IBLTAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode;
     use rand;
     use rand::Rng;
     use num_bigint::ToBigUint;
@@ -278,16 +275,19 @@ mod tests {
     #[test]
     fn empty_serialization() {
         let acc1 = IBLTAccumulator::new(1000);
-        let acc2 = IBLTAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(acc1.equals(&acc2));
     }
 
     #[test]
     fn serialization_with_data() {
         let mut acc1 = IBLTAccumulator::new(1000);
-        let acc2 = IBLTAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));
-        let acc3 = IBLTAccumulator::deserialize_bytes(&acc1.serialize_bytes());
+        let bytes = bincode::serialize(&acc1).unwrap();
+        let acc3: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(!acc1.equals(&acc2));
         assert!(acc1.equals(&acc3));
     }
