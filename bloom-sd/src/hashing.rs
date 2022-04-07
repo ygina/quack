@@ -1,4 +1,5 @@
-use std::hash::{BuildHasher,Hash,Hasher};
+use std::hash::{Hash, Hasher};
+use siphasher::sip128::SipHasher13;
 
 pub struct HashIter {
     h1: u64,
@@ -28,14 +29,14 @@ impl Iterator for HashIter {
 }
 
 impl HashIter {
-    pub fn from<T: Hash, R: BuildHasher, S: BuildHasher>(
+    pub fn from<T: Hash>(
         item: T,
         count: u32,
-        build_hasher_one: &R,
-        build_hasher_two: &S,
+        build_hasher_one: &SipHasher13,
+        build_hasher_two: &SipHasher13,
     ) -> HashIter {
-        let mut hasher_one = build_hasher_one.build_hasher();
-        let mut hasher_two = build_hasher_two.build_hasher();
+        let mut hasher_one = build_hasher_one.clone();
+        let mut hasher_two = build_hasher_two.clone();
         item.hash(&mut hasher_one);
         item.hash(&mut hasher_two);
         let h1 = hasher_one.finish();

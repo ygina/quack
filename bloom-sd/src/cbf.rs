@@ -1,19 +1,21 @@
 //! Based on https://docs.rs/bloom/0.3.2/bloom/counting/struct.CountingBloomFilter.html
 //! except with properties specific to the CBF accumulator of the subset digest.
-use std::hash::{BuildHasher, Hash};
-use std::collections::hash_map::RandomState;
+use rand;
+use rand::Rng;
+use std::hash::Hash;
+use siphasher::sip128::SipHasher13;
 use bloom::valuevec::ValueVec;
 use crate::hashing::HashIter;
 
-pub struct CountingBloomFilter<R = RandomState, S = RandomState> {
+pub struct CountingBloomFilter {
     counters: ValueVec,
     num_entries: u64,
     num_hashes: u32,
-    hash_builder_one: R,
-    hash_builder_two: S,
+    hash_builder_one: SipHasher13,
+    hash_builder_two: SipHasher13,
 }
 
-impl CountingBloomFilter<RandomState, RandomState> {
+impl CountingBloomFilter {
     /// Creates a CountingBloomFilter that uses `bits_per_entry` bits for
     /// each entry and expects to hold `expected_num_items`. The filter
     /// will be sized to have a false positive rate of the value specified
@@ -28,12 +30,13 @@ impl CountingBloomFilter<RandomState, RandomState> {
             bits_per_entry,
             expected_num_items,
         );
+        let mut rng = rand::thread_rng();
         CountingBloomFilter {
             counters: ValueVec::new(bits_per_entry, num_entries),
             num_entries: num_entries as u64,
             num_hashes,
-            hash_builder_one: RandomState::new(),
-            hash_builder_two: RandomState::new(),
+            hash_builder_one: SipHasher13::new_with_keys(rng.gen(), rng.gen()),
+            hash_builder_two: SipHasher13::new_with_keys(rng.gen(), rng.gen()),
         }
     }
 
@@ -66,11 +69,25 @@ impl CountingBloomFilter<RandomState, RandomState> {
     }
 
     pub fn equals(&self, other: &Self) -> bool {
-        unimplemented!()
+        if self.num_entries != other.num_entries
+            || self.num_hashes != other.num_hashes
+            || self.hash_builder_one.keys() != other.hash_builder_one.keys()
+            || self.hash_builder_two.keys() != other.hash_builder_two.keys()
+        {
+            return false;
+        }
+        let nbits = self.counters.len();
+        if nbits != other.counters.len() {
+            return false;
+        }
+        for i in 0..(nbits / self.counters.bits_per_val()) {
+            if self.counters.get(i) != other.counters.get(i) {
+                return false;
+            }
+        }
+        true
     }
-}
 
-impl<R,S> CountingBloomFilter<R,S> where R: BuildHasher, S: BuildHasher {
     /// Inserts an item, returns true if the item was already in the filter
     /// any number of times.
     pub fn insert<T: Hash>(&mut self, item: &T) -> bool {

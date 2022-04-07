@@ -1,24 +1,26 @@
-use std::hash::BuildHasher;
 use std::collections::HashSet;
-use std::collections::hash_map::RandomState;
+
+use rand;
+use rand::Rng;
 use bloom::valuevec::ValueVec;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::{One, Zero};
+use siphasher::sip128::SipHasher13;
 use crate::hashing::HashIter;
 
 /// TODO: Fatally, assumes inserted elements are unique.
 /// Elements are u32s.
-pub struct InvBloomLookupTable<R = RandomState, S = RandomState> {
+pub struct InvBloomLookupTable {
     counters: ValueVec,
     max_data_value: BigUint,
     data: Vec<BigUint>,
     num_entries: u64,
     num_hashes: u32,
-    hash_builder_one: R,
-    hash_builder_two: S,
+    hash_builder_one: SipHasher13,
+    hash_builder_two: SipHasher13,
 }
 
-impl InvBloomLookupTable<RandomState, RandomState> {
+impl InvBloomLookupTable {
     /// Creates a InvBloomLookupTable that uses `bits_per_entry` bits for
     /// each entry and expects to hold `expected_num_items`. The filter
     /// will be sized to have a false positive rate of the value specified
@@ -35,6 +37,7 @@ impl InvBloomLookupTable<RandomState, RandomState> {
             bits_per_entry,
             expected_num_items,
         );
+        let mut rng = rand::thread_rng();
         InvBloomLookupTable {
             max_data_value: 2_u8.to_biguint().unwrap().pow(log2_data_length)
                 - BigUint::one(),
@@ -42,8 +45,8 @@ impl InvBloomLookupTable<RandomState, RandomState> {
             counters: ValueVec::new(bits_per_entry, num_entries),
             num_entries: num_entries as u64,
             num_hashes,
-            hash_builder_one: RandomState::new(),
-            hash_builder_two: RandomState::new(),
+            hash_builder_one: SipHasher13::new_with_keys(rng.gen(), rng.gen()),
+            hash_builder_two: SipHasher13::new_with_keys(rng.gen(), rng.gen()),
         }
     }
 
@@ -86,11 +89,27 @@ impl InvBloomLookupTable<RandomState, RandomState> {
     }
 
     pub fn equals(&self, other: &Self) -> bool {
-        unimplemented!()
+        if self.num_entries != other.num_entries
+            || self.num_hashes != other.num_hashes
+            || self.hash_builder_one.keys() != other.hash_builder_one.keys()
+            || self.hash_builder_two.keys() != other.hash_builder_two.keys()
+            || self.max_data_value != other.max_data_value
+            || self.data != other.data
+        {
+            return false;
+        }
+        let nbits = self.counters.len();
+        if nbits != other.counters.len() {
+            return false;
+        }
+        for i in 0..(nbits / self.counters.bits_per_val()) {
+            if self.counters.get(i) != other.counters.get(i) {
+                return false;
+            }
+        }
+        true
     }
-}
 
-impl<R,S> InvBloomLookupTable<R,S> where R: BuildHasher, S: BuildHasher {
     /// Inserts an item, returns true if the item was already in the filter
     /// any number of times.
     pub fn insert(&mut self, item: &BigUint) -> bool {
