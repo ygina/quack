@@ -2,6 +2,8 @@ use std::collections::{HashSet, HashMap};
 use std::hash::Hasher;
 use std::time::Instant;
 
+use bincode;
+use serde::{Serialize, Deserialize};
 use djb_hash::{HasherU32, x33a_u32::*};
 use num_bigint::BigUint;
 use tokio::task;
@@ -28,7 +30,7 @@ const LARGE_PRIME: i64 = 51539607551;
 /// Note that validation cannot be  performed if the number of lost elements
 /// exceeds the threshold. All calculations are done in a finite field, modulo
 /// some 2^32 < large prime < 2^64 (the range of possible elements).
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PowerSumAccumulator {
     digest: Digest,
     num_elems: usize,
@@ -234,13 +236,13 @@ impl PowerSumAccumulator {
 
     /// Deserialize the accumulator into bytes.
     pub fn deserialize_bytes(bytes: &[u8]) -> Self {
-        unimplemented!()
+        bincode::deserialize(bytes).unwrap()
     }
 }
 
 impl Accumulator for PowerSumAccumulator {
     fn serialize_bytes(&self) -> Vec<u8> {
-        unimplemented!()
+        bincode::serialize(self).unwrap()
     }
 
     fn process(&mut self, elem: &BigUint) {
