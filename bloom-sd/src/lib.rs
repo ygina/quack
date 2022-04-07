@@ -1,29 +1,15 @@
 mod hashing;
 mod valuevec;
 mod cbf;
-// mod iblt;
+mod iblt;
 
 pub use cbf::CountingBloomFilter;
-// pub use iblt::InvBloomLookupTable;
+pub use iblt::InvBloomLookupTable;
+pub use iblt::elem_to_u32;
 
-use num_bigint::BigUint;
 use bit_vec::BitVec;
 use siphasher::sip128::SipHasher13;
 use serde::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "BigUint")]
-struct BigUintDef {
-    #[serde(getter = "BigUint::to_bytes_be")]
-    bytes_be: Vec<u8>,
-}
-
-// Provide a conversion to construct the remote type.
-impl From<BigUintDef> for BigUint {
-    fn from(def: BigUintDef) -> BigUint {
-        BigUint::from_bytes_be(&def.bytes_be)
-    }
-}
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "SipHasher13")]

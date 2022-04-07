@@ -1,24 +1,35 @@
 use std::collections::HashSet;
+use std::hash::Hasher;
 
 use rand;
 use rand::Rng;
-use num_bigint::{BigUint, ToBigUint};
-use num_traits::{One, Zero};
+use num_bigint::BigUint;
+use serde::{Serialize, Deserialize};
+use djb_hash::{HasherU32, x33a_u32::*};
 use siphasher::sip128::SipHasher13;
 
 use crate::valuevec::ValueVec;
 use crate::hashing::HashIter;
+use crate::SipHasher13Def;
 
-/// TODO: Fatally, assumes inserted elements are unique.
-/// Elements are u32s.
+#[derive(Serialize, Deserialize)]
 pub struct InvBloomLookupTable {
     counters: ValueVec,
-    max_data_value: BigUint,
-    data: Vec<BigUint>,
+    // sum of djb_hashed data with wraparound overflow
+    data: Vec<u32>,
     num_entries: u64,
     num_hashes: u32,
+    #[serde(with = "SipHasher13Def")]
     hash_builder_one: SipHasher13,
+    #[serde(with = "SipHasher13Def")]
     hash_builder_two: SipHasher13,
+}
+
+/// Maps an element in the lookup table to a u32.
+pub fn elem_to_u32(elem: &BigUint) -> u32 {
+    let mut hasher = X33aU32::new();
+    hasher.write(&elem.to_bytes_be());
+    hasher.finish_u32()
 }
 
 impl InvBloomLookupTable {
@@ -27,7 +38,6 @@ impl InvBloomLookupTable {
     /// will be sized to have a false positive rate of the value specified
     /// in `rate`.
     pub fn with_rate(
-        log2_data_length: u32,
         bits_per_entry: usize,
         rate: f32,
         expected_num_items: u32,
@@ -40,9 +50,7 @@ impl InvBloomLookupTable {
         );
         let mut rng = rand::thread_rng();
         InvBloomLookupTable {
-            max_data_value: 2_u8.to_biguint().unwrap().pow(log2_data_length)
-                - BigUint::one(),
-            data: vec![BigUint::zero(); num_entries],
+            data: vec![0; num_entries],
             counters: ValueVec::new(bits_per_entry, num_entries),
             num_entries: num_entries as u64,
             num_hashes,
@@ -55,8 +63,7 @@ impl InvBloomLookupTable {
     pub fn empty_clone(&self) -> Self {
         let bits_per_entry = self.counters.bits_per_val();
         Self {
-            max_data_value: self.max_data_value.clone(),
-            data: vec![0.to_biguint().unwrap(); self.num_entries as usize],
+            data: vec![0; self.num_entries as usize],
             counters: ValueVec::new(bits_per_entry, self.num_entries as usize),
             num_entries: self.num_entries,
             num_hashes: self.num_hashes,
@@ -65,11 +72,11 @@ impl InvBloomLookupTable {
         }
     }
 
-    pub fn data(&self) -> &Vec<BigUint> {
+    pub fn data(&self) -> &Vec<u32> {
         &self.data
     }
 
-    pub fn data_mut(&mut self) -> &mut Vec<BigUint> {
+    pub fn data_mut(&mut self) -> &mut Vec<u32> {
         &mut self.data
     }
 
@@ -94,7 +101,6 @@ impl InvBloomLookupTable {
             || self.num_hashes != other.num_hashes
             || self.hash_builder_one.keys() != other.hash_builder_one.keys()
             || self.hash_builder_two.keys() != other.hash_builder_two.keys()
-            || self.max_data_value != other.max_data_value
             || self.data != other.data
         {
             return false;
@@ -115,7 +121,8 @@ impl InvBloomLookupTable {
     /// any number of times.
     pub fn insert(&mut self, item: &BigUint) -> bool {
         let mut min = u32::max_value();
-        for h in HashIter::from(item,
+        let item_u32 = elem_to_u32(item);
+        for h in HashIter::from(item_u32,
                                 self.num_hashes,
                                 &self.hash_builder_one,
                                 &self.hash_builder_two) {
@@ -126,11 +133,11 @@ impl InvBloomLookupTable {
             }
             if cur < self.counters.max_value() {
                 self.counters.set(idx, cur + 1);
-                let difference = &self.max_data_value - &self.data[idx];
-                if difference > *item {
-                    self.data[idx] += item;
+                let difference = u32::max_value() - self.data[idx];
+                if difference > item_u32 {
+                    self.data[idx] += item_u32;
                 } else {
-                    self.data[idx] = item - difference;
+                    self.data[idx] = item_u32 - difference;
                 }
             } else {
                 panic!("counting bloom filter counter overflow");
@@ -141,20 +148,25 @@ impl InvBloomLookupTable {
 
     /// Removes an item, panics if the item does not exist.
     pub fn remove(&mut self, item: &BigUint) {
-        for h in HashIter::from(item,
-                                self.num_hashes,
-                                &self.hash_builder_one,
-                                &self.hash_builder_two) {
+        let item_u32 = elem_to_u32(item);
+        self.remove_u32(item_u32);
+    }
+
+    fn remove_u32(&mut self, item_u32: u32) {
+        for h in HashIter::from(item_u32,
+                            self.num_hashes,
+                            &self.hash_builder_one,
+                            &self.hash_builder_two) {
             let idx = (h % self.num_entries) as usize;
             let cur = self.counters.get(idx);
             if cur == 0 {
                 panic!("item is not in the iblt");
             }
             self.counters.set(idx, cur - 1);
-            if self.data[idx] >= *item {
-                self.data[idx] -= item;
+            if self.data[idx] >= item_u32 {
+                self.data[idx] -= item_u32;
             } else {
-                self.data[idx] = &self.max_data_value - (item - &self.data[idx]);
+                self.data[idx] = u32::max_value() - (item_u32 - self.data[idx]);
             }
         }
     }
@@ -162,7 +174,8 @@ impl InvBloomLookupTable {
     /// Checks if the item has been inserted into this InvBloomLookupTable.
     /// This function can return false positives, but not false negatives.
     pub fn contains(&self, item: &BigUint) -> bool {
-        for h in HashIter::from(item,
+        let item_u32 = elem_to_u32(item);
+        for h in HashIter::from(item_u32,
                                 self.num_hashes,
                                 &self.hash_builder_one,
                                 &self.hash_builder_two) {
@@ -177,7 +190,8 @@ impl InvBloomLookupTable {
 
     /// Gets the indexes of the item in the vector.
     pub fn indexes(&self, item: &BigUint) -> Vec<usize> {
-        HashIter::from(item,
+        let item_u32 = elem_to_u32(item);
+        HashIter::from(item_u32,
                        self.num_hashes,
                        &self.hash_builder_one,
                        &self.hash_builder_two)
@@ -189,10 +203,11 @@ impl InvBloomLookupTable {
     /// Enumerates as many items as possible in the IBLT and removes them.
     /// Returns the removed items. Note removed elements must be unique
     /// unless the IBLT uses an accumulator function that is not an XOR.
-    pub fn eliminate_elems(&mut self) -> HashSet<BigUint> {
+    /// The caller will need to map elements to u32.
+    pub fn eliminate_elems(&mut self) -> HashSet<u32> {
         // Loop through all the counters of the IBLT until there are no
         // remaining cells with count 1. This is O(num_counters*max_count).
-        let mut removed_set: HashSet<BigUint> = HashSet::new();
+        let mut removed_set: HashSet<u32> = HashSet::new();
         loop {
             let mut removed = false;
             for i in 0..(self.num_entries as usize) {
@@ -200,7 +215,7 @@ impl InvBloomLookupTable {
                     continue;
                 }
                 let item = self.data[i].clone();
-                self.remove(&item);
+                self.remove_u32(item);
                 assert!(removed_set.insert(item));
                 removed = true;
             }
@@ -214,15 +229,34 @@ impl InvBloomLookupTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode;
+    use num_bigint::ToBigUint;
     use num_traits::Zero;
 
     fn init_iblt() -> InvBloomLookupTable {
-        InvBloomLookupTable::with_rate(128, 8, 0.01, 10)
+        InvBloomLookupTable::with_rate(8, 0.01, 10)
     }
 
     fn vvsum(vec: &ValueVec) -> usize {
         let num_entries = vec.len() / vec.bits_per_val();
         (0..num_entries).map(|i| vec.get(i)).sum::<u32>() as usize
+    }
+
+    #[test]
+    fn test_serialization_empty() {
+        let iblt1 = init_iblt();
+        let bytes = bincode::serialize(&iblt1).unwrap();
+        let iblt2 = bincode::deserialize(&bytes).unwrap();
+        assert!(iblt1.equals(&iblt2));
+    }
+
+    #[test]
+    fn test_serialization_with_data() {
+        let mut iblt1 = init_iblt();
+        iblt1.insert(&1234_u32.to_biguint().unwrap());
+        let bytes = bincode::serialize(&iblt1).unwrap();
+        let iblt2 = bincode::deserialize(&bytes).unwrap();
+        assert!(iblt1.equals(&iblt2));
     }
 
     #[test]
@@ -256,19 +290,19 @@ mod tests {
         let indexes = iblt.indexes(&elem);
         for &idx in &indexes {
             assert_eq!(iblt.counters().get(idx), 0);
-            assert_eq!(iblt.data()[idx], BigUint::zero());
+            assert_eq!(iblt.data()[idx], 0);
         }
         assert!(!iblt.insert(&elem), "element did not exist already");
         assert_eq!(vvsum(iblt.counters()), 1 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_ne!(iblt.data()[idx], BigUint::zero());
+            assert_ne!(iblt.data()[idx], 0);
         }
         assert!(iblt.insert(&elem), "added element twice");
         assert_eq!(vvsum(iblt.counters()), 2 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_ne!(iblt.data()[idx], BigUint::zero());
+            assert_ne!(iblt.data()[idx], 0);
         }
     }
 
@@ -280,8 +314,8 @@ mod tests {
         let iblt2 = iblt1.empty_clone();
         assert!(vvsum(iblt1.counters()) > 0);
         assert_eq!(vvsum(iblt2.counters()), 0);
-        assert!(iblt1.data().iter().sum::<BigUint>() > BigUint::zero());
-        assert_eq!(iblt2.data().iter().sum::<BigUint>(), BigUint::zero());
+        assert!(iblt1.data().iter().sum::<u32>() > 0);
+        assert_eq!(iblt2.data().iter().sum::<u32>(), 0);
         assert_eq!(
             iblt1.indexes(&1234_u32.to_biguint().unwrap()),
             iblt2.indexes(&1234_u32.to_biguint().unwrap()));
@@ -290,7 +324,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn counter_overflow() {
-        let mut iblt = InvBloomLookupTable::with_rate(128, 1, 0.01, 10);
+        let mut iblt = InvBloomLookupTable::with_rate(1, 0.01, 10);
         iblt.insert(&1234_u32.to_biguint().unwrap());
         iblt.insert(&1234_u32.to_biguint().unwrap());
     }

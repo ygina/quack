@@ -1,5 +1,5 @@
 use std::time::Instant;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use bloom_sd::InvBloomLookupTable;
@@ -35,14 +35,12 @@ pub struct IBLTAccumulator {
 
 // TODO: IBLT parameters
 // TODO: may also want to map IBLT entries to u32 with DJB hash
-const LOG_DATA_LENGTH: u32 = 128;
 const BITS_PER_ENTRY: usize = 16;
 const FALSE_POSITIVE_RATE: f32 = 0.0001;
 
 impl IBLTAccumulator {
     pub fn new(threshold: usize) -> Self {
         let iblt = InvBloomLookupTable::with_rate(
-            LOG_DATA_LENGTH,
             BITS_PER_ENTRY,
             FALSE_POSITIVE_RATE,
             threshold.try_into().unwrap(),
@@ -61,7 +59,6 @@ impl IBLTAccumulator {
 
     pub fn new_with_rate(threshold: usize, fp_rate: f32) -> Self {
         let iblt = InvBloomLookupTable::with_rate(
-            LOG_DATA_LENGTH,
             BITS_PER_ENTRY,
             fp_rate,
             threshold.try_into().unwrap(),
@@ -147,7 +144,7 @@ impl Accumulator for IBLTAccumulator {
             let difference_data = if processed_data >= received_data {
                 processed_data - received_data
             } else {
-                (u128::MAX - received_data) + processed_data
+                (u32::MAX - received_data) + processed_data
             };
             if difference_count == 0 && !difference_data.is_zero() {
                 return false;
@@ -175,7 +172,7 @@ impl Accumulator for IBLTAccumulator {
         if removed.len() == n_dropped {
             let mut digest = Digest::new();
             for elem in elems {
-                if !removed.remove(elem) {
+                if !removed.remove(&bloom_sd::elem_to_u32(&elem)) {
                     digest.add(elem);
                 }
             }
@@ -232,17 +229,26 @@ impl Accumulator for IBLTAccumulator {
         let t5 = Instant::now();
         info!("solved ILP: {:?}", t5 - t4);
         if err == 0 {
-            // TODO: verify the XORs check out when removing these elements
-            // from the difference IBLT?
-            let mut dropped_count: HashMap<BigUint, usize> = HashMap::new();
-            for dropped_i in dropped {
-                let elem = elems[elems_i[dropped_i]].clone();
-                *(dropped_count.entry(elem).or_insert(0)) += 1;
+            // Right now we have:
+            // * `removed` - the djb hash of elems that were definitely dropped
+            // * `dropped` - the indexes of the elems the ILP believes were
+            //    dropped in the `elems_i` vec.
+            let dropped_is = dropped
+                .into_iter()
+                .map(|dropped_i| elems_i[dropped_i])
+                .collect::<HashSet<_>>();
+            let mut digest = Digest::new();
+            for i in 0..elems.len() {
+                if dropped_is.contains(&i) {
+                    continue;
+                }
+                let elem_u32 = bloom_sd::elem_to_u32(&elems[i]);
+                if removed.remove(&elem_u32) {
+                    continue;
+                }
+                digest.add(&elems[i]);
             }
-            for elem in removed {
-                *(dropped_count.entry(elem).or_insert(0)) += 1;
-            }
-            crate::check_digest(elems, dropped_count, &self.digest)
+            digest.equals(&self.digest)
         } else {
             warn!("ILP solving error: {}", err);
             false
