@@ -15,12 +15,16 @@
 
 //! https://docs.rs/bloom/0.3.2/src/bloom/valuevec.rs.html
 use bit_vec::BitVec;
+use serde::{Serialize, Deserialize};
+use crate::BitVecDef;
 
 /// A ValueVec is a bit vector that holds fixed sized unsigned integer
 /// values.
+#[derive(Serialize, Deserialize)]
 pub struct ValueVec {
     bits_per_val: usize,
     mask: u32,
+    #[serde(with = "BitVecDef")]
     bits: BitVec,
 }
 

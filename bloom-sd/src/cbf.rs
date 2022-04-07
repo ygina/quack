@@ -3,16 +3,21 @@
 use rand;
 use rand::Rng;
 use std::hash::Hash;
+use serde::{Serialize, Deserialize};
 use siphasher::sip128::SipHasher13;
 
 use crate::valuevec::ValueVec;
 use crate::hashing::HashIter;
+use crate::SipHasher13Def;
 
+#[derive(Serialize, Deserialize)]
 pub struct CountingBloomFilter {
     counters: ValueVec,
     num_entries: u64,
     num_hashes: u32,
+    #[serde(with = "SipHasher13Def")]
     hash_builder_one: SipHasher13,
+    #[serde(with = "SipHasher13Def")]
     hash_builder_two: SipHasher13,
 }
 
@@ -142,6 +147,7 @@ impl CountingBloomFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode;
 
     fn init_cbf() -> CountingBloomFilter {
         CountingBloomFilter::with_rate(8, 0.01, 10)
@@ -179,6 +185,23 @@ mod tests {
         assert!(!cbf1.equals(&cbf4), "empty clone removes data");
         assert!(cbf1.equals(&cbf1), "reflexive equality");
         assert!(cbf2.equals(&cbf2), "reflexive equality");
+    }
+
+    #[test]
+    fn test_serialization_empty() {
+        let cbf1 = init_cbf();
+        let bytes = bincode::serialize(&cbf1).unwrap();
+        let cbf2 = bincode::deserialize(&bytes).unwrap();
+        assert!(cbf1.equals(&cbf2));
+    }
+
+    #[test]
+    fn test_serialization_with_data() {
+        let mut cbf1 = init_cbf();
+        cbf1.insert(&1234);
+        let bytes = bincode::serialize(&cbf1).unwrap();
+        let cbf2 = bincode::deserialize(&bytes).unwrap();
+        assert!(cbf1.equals(&cbf2));
     }
 
     #[test]
