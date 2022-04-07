@@ -51,8 +51,6 @@ impl IBLTAccumulator {
         let data_size = std::mem::size_of_val(&iblt.data()[0]);
         debug!("{} entries and {} bits per entry",
             iblt.num_entries(), BITS_PER_ENTRY);
-        info!("size of iblt = {} bytes",
-            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + data_size) / 8);
         Self {
             digest: Digest::new(),
             num_elems: 0,

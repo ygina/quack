@@ -1,6 +1,10 @@
 #[macro_use]
 extern crate log;
 
+use std::net::TcpListener;
+use std::io::Write;
+
+use bincode;
 use clap::{Arg, Command};
 use num_bigint::BigUint;
 use pcap::{Capture, Device};
@@ -8,7 +12,7 @@ use accumulator::*;
 
 const PACKET_LEN: i32 = 128 / 8;
 
-fn pcap_listen(mut accumulator: Box<dyn Accumulator>, timeout: i32) {
+async fn pcap_listen(mut accumulator: Box<dyn Accumulator>, timeout: i32) {
     let device = Device::lookup().unwrap();
     info!("listening on {:?}", device);
     let mut cap = Capture::from_device(device).unwrap()
@@ -30,17 +34,38 @@ fn pcap_listen(mut accumulator: Box<dyn Accumulator>, timeout: i32) {
     }
 }
 
-fn main() {
+async fn tcp_listen(port: u32) {
+    info!("listening on port {}", port);
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+    for stream in listener.incoming() {
+        let mut stream = stream.unwrap();
+        let digest = b"1234";
+        // let bytes = bincode::serialize(&digest).unwrap();
+        let bytes = digest;
+        info!("sending {} bytes to {:?}", bytes.len(), stream.peer_addr());
+        stream.write(bytes).unwrap();
+        stream.flush().unwrap();
+    }
+}
+
+#[tokio::main]
+async fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
     let matches = Command::new("benchmark")
         .arg(Arg::new("timeout")
             .help("Read timeout for the capture, in ms. The library uses 0 \
                 by default, blocking indefinitely, but causes the capture \
                 to hang in MacOS.")
-            .short('t')
             .long("timeout")
             .takes_value(true)
             .default_value("10000000"))
+        .arg(Arg::new("port")
+            .help("TCP port to listen on. Returns the serialized digest to \
+                any connection on this port")
+            .short('p')
+            .long("port")
+            .takes_value(true)
+            .default_value("7878"))
         .arg(Arg::new("threshold")
             .help("Threshold number of log packets for the CBF \
                 and power sum accumulators.")
@@ -61,6 +86,7 @@ fn main() {
         .get_matches();
 
     let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
+    let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
     let accumulator: Box<dyn Accumulator> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
             .parse().unwrap();
@@ -73,5 +99,8 @@ fn main() {
         }
     };
 
-    pcap_listen(accumulator, timeout);
+    tokio::spawn(async move {
+        tcp_listen(port).await;
+    });
+    pcap_listen(accumulator, timeout).await;
 }
