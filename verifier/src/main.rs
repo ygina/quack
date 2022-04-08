@@ -47,6 +47,11 @@ fn get_router_logs(filename: &str, nbytes: usize) -> Vec<BigUint> {
 fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
     let matches = Command::new("verifier")
+        .arg(Arg::new("check-acc-logs")
+            .help("Whether to check accumulator logs against router logs. \
+                FOR DEBUGGING ONLY. (suggested: log.txt)")
+            .long("check-acc-logs")
+            .takes_value(true))
         .arg(Arg::new("port")
             .help("Port of the accumulator's TCP service.")
             .short('p')
@@ -92,5 +97,17 @@ fn main() {
         info!("valid router");
     } else {
         warn!("invalid router");
+    }
+
+    if let Some(acc_filename) = matches.value_of("check-acc-logs") {
+        info!("router logs:");
+        for i in 0..std::cmp::min(10, router_logs.len()) {
+            println!("{:?}", router_logs[i]);
+        }
+        info!("accumulator logs:");
+        let accumulator_logs = get_router_logs(acc_filename, bytes);
+        for i in 0..std::cmp::min(10, accumulator_logs.len()) {
+            println!("{:?}", accumulator_logs[i]);
+        }
     }
 }

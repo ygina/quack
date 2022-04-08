@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+use std::fs::{OpenOptions, File};
 use std::net::TcpListener;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -10,7 +11,16 @@ use num_bigint::BigUint;
 use pcap::{Capture, Device};
 use accumulator::*;
 
+fn write_data(f: &mut File, bytes: usize, data: &[u8]) {
+    let len = std::cmp::min(data.len(), bytes);
+    if len < bytes {
+        f.write_all(&vec![0; bytes - len]).unwrap();
+    }
+    f.write_all(&data[..len]).unwrap();
+}
+
 async fn pcap_listen_mock(
+    mut log: Option<File>,
     bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     _timeout: i32,
@@ -24,12 +34,16 @@ async fn pcap_listen_mock(
     for data in packets {
         let len = std::cmp::min(data.len(), bytes as usize);
         let elem = BigUint::from_bytes_be(&data[..len]);
+        if let Some(f) = log.as_mut() {
+            write_data(f, bytes, &data[..len]);
+        }
         accumulator.process(&elem);
     }
     drop(accumulator);
 }
 
 async fn pcap_listen(
+    mut log: Option<File>,
     bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     timeout: i32,
@@ -51,6 +65,9 @@ async fn pcap_listen(
         // Maybe we can buffer and batch.
         let mut accumulator = accumulator.lock().unwrap();
         accumulator.process(&elem);
+        if let Some(f) = log.as_mut() {
+            write_data(f, bytes, &packet.data[..len]);
+        }
         drop(accumulator);
         n += 1;
         if n % 1000 == 0 {
@@ -83,6 +100,13 @@ async fn main() {
         .arg(Arg::new("mock")
             .help("Write mock data.")
             .long("mock"))
+        .arg(Arg::new("log")
+            .help("Whether to log data received in PCAP. FOR DEBUGGING \
+                PURPOSES ONLY. Normally, the device running the accumulator \
+                would not have enough space to maintain these logs. Writes \
+                to the given filename (suggested: log.txt).")
+            .long("log")
+            .takes_value(true))
         .arg(Arg::new("timeout")
             .help("Read timeout for the capture, in ms. The library uses 0 \
                 by default, blocking indefinitely, but causes the capture \
@@ -126,6 +150,17 @@ async fn main() {
     let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
+    let log = matches.value_of("log").map(|filename| {
+        info!("{}", filename);
+        let path = std::path::Path::new(filename);
+        if path.exists() {
+            File::create(filename).unwrap();
+        }
+        OpenOptions::new()
+            .append(true)
+            .open(filename)
+            .unwrap()
+    });
     let accumulator: Box<dyn Accumulator + Send> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
             .parse().unwrap();
@@ -143,9 +178,9 @@ async fn main() {
         tcp_listen(lock_clone, port).await;
     });
     if matches.is_present("mock") {
-        pcap_listen_mock(bytes, lock, timeout).await;
+        pcap_listen_mock(log, bytes, lock, timeout).await;
     } else {
-        pcap_listen(bytes, lock, timeout).await;
+        pcap_listen(log, bytes, lock, timeout).await;
     }
     join.await.unwrap();
 }
