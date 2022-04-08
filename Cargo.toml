@@ -6,4 +6,5 @@ members = [
     "bloom-sd",
     "digest",
     "router",
+    "verifier",
 ]
