@@ -4,21 +4,49 @@ extern crate log;
 use std::net::TcpStream;
 use std::io::Read;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use bincode;
+use ssh2::Session;
 use clap::{Arg, Command};
 use num_bigint::BigUint;
 use accumulator::*;
+
+/// Connect to the SSH server and assert the session is authenticated.
+fn establish_ssh_session(ssh: &str) -> Session {
+    let tcp = TcpStream::connect(ssh).unwrap();
+    let mut sess = Session::new().unwrap();
+    sess.set_tcp_stream(tcp);
+    sess.handshake().unwrap();
+    sess.userauth_agent("username").unwrap();
+    assert!(sess.authenticated());
+    sess
+}
 
 /// Call the accumulator's TCP service and read the bytes.
 /// Assume we know which type of accumulator it is using.
 /// TODO: SSH into Pi and call the TCP service from there since
 /// the TCP port shouldn't be externally exposed.
-fn get_accumulator(address: &str, ty: &str) -> Box<dyn Accumulator> {
-    let mut stream = TcpStream::connect(address).unwrap();
-    let mut buf: Vec<u8> = vec![];
-    let n = stream.read_to_end(&mut buf).unwrap();
-    info!("accumulator size = {} bytes", n);
+fn get_accumulator(
+    ssh: Option<&str>,
+    port: u32,
+    ty: &str,
+) -> Box<dyn Accumulator> {
+    let mut buf = Vec::new();
+    if let Some(ssh) = ssh {
+        let sess = establish_ssh_session(ssh);
+        let mut channel = sess.channel_session().unwrap();
+        let cmd = format!("nc -v 127.0.0.1 {}", port);
+        channel.exec(&cmd).unwrap();
+        channel.read_to_end(&mut buf).unwrap();
+        channel.wait_close().unwrap();
+        debug!("channel exit status: {}", channel.exit_status().unwrap())
+    } else {
+        let address = format!("127.0.0.1:{}", port);
+        let mut stream = TcpStream::connect(address).unwrap();
+        stream.read_to_end(&mut buf).unwrap();
+    };
+    info!("accumulator size = {} bytes", buf.len());
     info!("accumulator type = {}", ty);
     match ty {
         "naive" => Box::new(bincode::deserialize::<NaiveAccumulator>(&buf).unwrap()),
@@ -30,14 +58,34 @@ fn get_accumulator(address: &str, ty: &str) -> Box<dyn Accumulator> {
 }
 
 /// Read the file that contains the router logs.
-/// - `filename`: name of the file
+/// - `ssh`: address and port to SSH into, if provided
+/// - `filename`: name of the file, if remote make sure to specify full path
 /// - `nbytes`: number of bytes per packet
 /// TODO: SFTP logs from router.
-fn get_router_logs(filename: &str, nbytes: usize) -> Vec<BigUint> {
-    if !std::path::Path::new(filename).exists() {
-        panic!("file does not exist: {}", filename);
-    }
-    let data = std::fs::read(filename).unwrap();
+fn get_router_logs(
+    ssh: Option<&str>,
+    filename: &str,
+    nbytes: usize,
+) -> Vec<BigUint> {
+    let data = if let Some(ssh) = ssh {
+        let sess = establish_ssh_session(ssh);
+        let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
+        debug!("remote file size: {}", stat.size());
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).unwrap();
+
+        // Close the channel and wait for the whole content to be tranferred
+        f.send_eof().unwrap();
+        f.wait_eof().unwrap();
+        f.close().unwrap();
+        f.wait_close().unwrap();
+        data
+    } else {
+        if !std::path::Path::new(filename).exists() {
+            panic!("file does not exist: {}", filename);
+        }
+        std::fs::read(filename).unwrap()
+    };
     let n_packets = data.len() / nbytes;
     (0..n_packets)
         .map(|i| ((i * nbytes), (i+1) * nbytes))
@@ -97,13 +145,13 @@ fn compare_maps(m1: HashMap<BigUint, usize>, m2: HashMap<BigUint, usize>) {
 /// Check the accumulator logs against the router logs (DEBUGGING ONLY).
 fn check_acc_logs(router_filename: &str, acc_filename: &str, bytes: usize) {
     info!("router logs:");
-    let router_logs = get_router_logs(router_filename, bytes);
+    let router_logs = get_router_logs(None, router_filename, bytes);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
         println!("{:?}", router_logs[i]);
     }
     info!("accumulator logs:");
-    let accumulator_logs = get_router_logs(acc_filename, bytes);
+    let accumulator_logs = get_router_logs(None, acc_filename, bytes);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
         println!("{:?}", accumulator_logs[i]);
@@ -138,6 +186,16 @@ fn main() {
             .long("bytes")
             .takes_value(true)
             .default_value("16"))
+        .arg(Arg::new("router-ssh")
+            .help("Address of the router to SSH into, if not local, i.e. \
+                `1.2.3.4:22`.")
+            .long("router-ssh")
+            .takes_value(true))
+        .arg(Arg::new("accumulator-ssh")
+            .help("Address of the accumulator to SSH into, if not local, i.e. \
+                `1.2.3.4:22`.")
+            .long("accumulator-ssh")
+            .takes_value(true))
         .arg(Arg::new("accumulator")
             .help("")
             .short('a')
@@ -154,14 +212,20 @@ fn main() {
     let filename = matches.value_of("filename").unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let accumulator_type = matches.value_of("accumulator").unwrap();
-
     if let Some(acc_filename) = matches.value_of("check-acc-logs") {
         check_acc_logs(filename, acc_filename, bytes)
     }
 
-    let address = format!("127.0.0.1:{}", port);
-    let accumulator = get_accumulator(&address, accumulator_type);
-    let router_logs = get_router_logs(filename, bytes);
+    let accumulator = get_accumulator(
+        matches.value_of("accumulator-ssh"),
+        port,
+        accumulator_type,
+    );
+    let router_logs = get_router_logs(
+        matches.value_of("router-ssh"),
+        filename,
+        bytes,
+    );
     info!("{}/{} packets received", accumulator.total(), router_logs.len());
     assert!(accumulator.total() <= router_logs.len());
     if accumulator.validate(&router_logs) {
