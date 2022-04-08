@@ -10,9 +10,8 @@ use num_bigint::BigUint;
 use pcap::{Capture, Device};
 use accumulator::*;
 
-const PACKET_LEN: i32 = 128 / 8;
-
 async fn pcap_listen(
+    bytes: i32,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     timeout: i32,
 ) {
@@ -21,12 +20,12 @@ async fn pcap_listen(
     let mut cap = Capture::from_device(device).unwrap()
         .promisc(true)
         .timeout(timeout)
-        .snaplen(PACKET_LEN)
+        .snaplen(bytes)
         .open().unwrap();
 
     let mut n: usize = 0;
     while let Ok(packet) = cap.next() {
-        let len = std::cmp::min(packet.data.len(), PACKET_LEN as usize);
+        let len = std::cmp::min(packet.data.len(), bytes as usize);
         let elem = BigUint::from_bytes_be(&packet.data[..len]);
         // NOTE: many of these elements are not unique
         // TODO: probably slow to put a lock around each packet.
@@ -76,6 +75,13 @@ async fn main() {
             .long("port")
             .takes_value(true)
             .default_value("7878"))
+        .arg(Arg::new("bytes")
+            .help("Number of bytes to record from each packet. Default is \
+                128 bits = 16 bytes.")
+            .short('b')
+            .long("bytes")
+            .takes_value(true)
+            .default_value("16"))
         .arg(Arg::new("threshold")
             .help("Threshold number of log packets for the CBF \
                 and power sum accumulators.")
@@ -96,6 +102,7 @@ async fn main() {
         .get_matches();
 
     let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
+    let bytes: i32 = matches.value_of("bytes").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
     let accumulator: Box<dyn Accumulator + Send> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
@@ -113,5 +120,5 @@ async fn main() {
     tokio::spawn(async move {
         tcp_listen(lock_clone, port).await;
     });
-    pcap_listen(lock, timeout).await;
+    pcap_listen(bytes, lock, timeout).await;
 }

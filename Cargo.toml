@@ -5,4 +5,5 @@ members = [
     "benchmark",
     "bloom-sd",
     "digest",
+    "router",
 ]
