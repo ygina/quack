@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use bincode;
 use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
 use bloom_sd::CountingBloomFilter;
@@ -60,6 +61,10 @@ impl CBFAccumulator {
 }
 
 impl Accumulator for CBFAccumulator {
+    fn to_bytes(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;

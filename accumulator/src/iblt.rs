@@ -1,6 +1,7 @@
 use std::time::Instant;
 use std::collections::HashSet;
 
+use bincode;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use serde::{Serialize, Deserialize};
@@ -48,7 +49,6 @@ impl IBLTAccumulator {
             FALSE_POSITIVE_RATE,
             threshold.try_into().unwrap(),
         );
-        let data_size = std::mem::size_of_val(&iblt.data()[0]);
         debug!("{} entries and {} bits per entry",
             iblt.num_entries(), BITS_PER_ENTRY);
         Self {
@@ -84,6 +84,10 @@ impl IBLTAccumulator {
 }
 
 impl Accumulator for IBLTAccumulator {
+    fn to_bytes(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;

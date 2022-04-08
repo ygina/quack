@@ -2,6 +2,7 @@ use std::collections::{HashSet, HashMap};
 use std::hash::Hasher;
 use std::time::Instant;
 
+use bincode;
 use serde::{Serialize, Deserialize};
 use djb_hash::{HasherU32, x33a_u32::*};
 use num_bigint::BigUint;
@@ -235,6 +236,10 @@ impl PowerSumAccumulator {
 }
 
 impl Accumulator for PowerSumAccumulator {
+    fn to_bytes(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;

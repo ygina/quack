@@ -1,4 +1,5 @@
 use std::time::Instant;
+use bincode;
 use itertools::Itertools;
 use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
@@ -30,6 +31,10 @@ impl NaiveAccumulator {
 }
 
 impl Accumulator for NaiveAccumulator {
+    fn to_bytes(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
         self.num_elems += 1;

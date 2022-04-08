@@ -3,8 +3,8 @@ extern crate log;
 
 use std::net::TcpListener;
 use std::io::Write;
+use std::sync::{Arc, Mutex};
 
-use bincode;
 use clap::{Arg, Command};
 use num_bigint::BigUint;
 use pcap::{Capture, Device};
@@ -12,7 +12,10 @@ use accumulator::*;
 
 const PACKET_LEN: i32 = 128 / 8;
 
-async fn pcap_listen(mut accumulator: Box<dyn Accumulator>, timeout: i32) {
+async fn pcap_listen(
+    accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
+    timeout: i32,
+) {
     let device = Device::lookup().unwrap();
     info!("listening on {:?}", device);
     let mut cap = Capture::from_device(device).unwrap()
@@ -26,7 +29,11 @@ async fn pcap_listen(mut accumulator: Box<dyn Accumulator>, timeout: i32) {
         let len = std::cmp::min(packet.data.len(), PACKET_LEN as usize);
         let elem = BigUint::from_bytes_be(&packet.data[..len]);
         // NOTE: many of these elements are not unique
+        // TODO: probably slow to put a lock around each packet.
+        // Maybe we can buffer and batch.
+        let mut accumulator = accumulator.lock().unwrap();
         accumulator.process(&elem);
+        drop(accumulator);
         n += 1;
         if n % 1000 == 0 {
             debug!("processed {} packets", n);
@@ -34,16 +41,19 @@ async fn pcap_listen(mut accumulator: Box<dyn Accumulator>, timeout: i32) {
     }
 }
 
-async fn tcp_listen(port: u32) {
+async fn tcp_listen(
+    accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
+    port: u32,
+) {
     info!("listening on port {}", port);
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        let digest = b"1234";
-        // let bytes = bincode::serialize(&digest).unwrap();
-        let bytes = digest;
+        let accumulator = accumulator.lock().unwrap();
+        let bytes = accumulator.to_bytes();
+        drop(accumulator);
         info!("sending {} bytes to {:?}", bytes.len(), stream.peer_addr());
-        stream.write(bytes).unwrap();
+        stream.write(&bytes).unwrap();
         stream.flush().unwrap();
     }
 }
@@ -87,7 +97,7 @@ async fn main() {
 
     let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
-    let accumulator: Box<dyn Accumulator> = {
+    let accumulator: Box<dyn Accumulator + Send> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
             .parse().unwrap();
         match matches.value_of("accumulator").unwrap() {
@@ -98,9 +108,10 @@ async fn main() {
             _ => unreachable!(),
         }
     };
-
+    let lock = Arc::new(Mutex::new(accumulator));
+    let lock_clone = Arc::clone(&lock);
     tokio::spawn(async move {
-        tcp_listen(port).await;
+        tcp_listen(lock_clone, port).await;
     });
-    pcap_listen(accumulator, timeout).await;
+    pcap_listen(lock, timeout).await;
 }
