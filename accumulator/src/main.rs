@@ -10,8 +10,27 @@ use num_bigint::BigUint;
 use pcap::{Capture, Device};
 use accumulator::*;
 
+async fn pcap_listen_mock(
+    bytes: usize,
+    accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
+    _timeout: i32,
+) {
+    let packets = vec![
+        vec![125; bytes],
+        vec![50; bytes - 1],
+        vec![26; bytes + 1],
+    ];
+    let mut accumulator = accumulator.lock().unwrap();
+    for data in packets {
+        let len = std::cmp::min(data.len(), bytes as usize);
+        let elem = BigUint::from_bytes_be(&data[..len]);
+        accumulator.process(&elem);
+    }
+    drop(accumulator);
+}
+
 async fn pcap_listen(
-    bytes: i32,
+    bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     timeout: i32,
 ) {
@@ -20,7 +39,7 @@ async fn pcap_listen(
     let mut cap = Capture::from_device(device).unwrap()
         .promisc(true)
         .timeout(timeout)
-        .snaplen(bytes)
+        .snaplen(bytes as i32)
         .open().unwrap();
 
     let mut n: usize = 0;
@@ -60,7 +79,10 @@ async fn tcp_listen(
 #[tokio::main]
 async fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
-    let matches = Command::new("benchmark")
+    let matches = Command::new("accumulator")
+        .arg(Arg::new("mock")
+            .help("Write mock data.")
+            .long("mock"))
         .arg(Arg::new("timeout")
             .help("Read timeout for the capture, in ms. The library uses 0 \
                 by default, blocking indefinitely, but causes the capture \
@@ -102,7 +124,7 @@ async fn main() {
         .get_matches();
 
     let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
-    let bytes: i32 = matches.value_of("bytes").unwrap().parse().unwrap();
+    let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
     let accumulator: Box<dyn Accumulator + Send> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
@@ -117,8 +139,13 @@ async fn main() {
     };
     let lock = Arc::new(Mutex::new(accumulator));
     let lock_clone = Arc::clone(&lock);
-    tokio::spawn(async move {
+    let join = tokio::spawn(async move {
         tcp_listen(lock_clone, port).await;
     });
-    pcap_listen(bytes, lock, timeout).await;
+    if matches.is_present("mock") {
+        pcap_listen_mock(bytes, lock, timeout).await;
+    } else {
+        pcap_listen(bytes, lock, timeout).await;
+    }
+    join.await.unwrap();
 }

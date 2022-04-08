@@ -2,14 +2,39 @@
 extern crate log;
 
 use std::fs;
-use std::path::Path;
+use std::fs::File;
 use std::io::Write;
+use std::path::Path;
 
 use clap::{Arg, Command};
 use pcap::{Capture, Device};
 
+fn write_data(f: &mut File, bytes: usize, data: &[u8]) {
+    let len = std::cmp::min(data.len(), bytes);
+    if len < bytes {
+        f.write_all(&vec![0; bytes - len]).unwrap();
+    }
+    f.write_all(&data[..len]).unwrap();
+}
+
+fn pcap_listen_mock(
+    f: &mut File,
+    bytes: usize,
+    _timeout: i32,
+) {
+    let packets = vec![
+        vec![125; bytes],
+        vec![50; bytes - 1],
+        vec![26; bytes + 1],
+        vec![88; bytes],
+    ];
+    for data in packets {
+        write_data(f, bytes, &data);
+    }
+}
+
 fn pcap_listen(
-    mut f: fs::File,
+    f: &mut File,
     bytes: usize,
     timeout: i32,
 ) {
@@ -23,12 +48,7 @@ fn pcap_listen(
 
     let mut n: usize = 0;
     while let Ok(packet) = cap.next() {
-        let len = std::cmp::min(packet.data.len(), bytes as usize);
-        f.write_all(&packet.data[..len]).unwrap();
-        if len < bytes {
-            f.write_all(&vec![0; bytes - len]).unwrap();
-        }
-        f.flush().unwrap();
+        write_data(f, bytes, packet.data);
         n += 1;
         if n % 1000 == 0 {
             debug!("processed {} packets", n);
@@ -50,6 +70,9 @@ fn main() {
         .arg(Arg::new("overwrite")
             .help("Overwrites the file if it already exists.")
             .long("overwrite"))
+        .arg(Arg::new("mock")
+            .help("Write mock data.")
+            .long("mock"))
         .arg(Arg::new("filename")
             .help("File to write to. Fails if the file already exists \
                 and the overwrite option is not passed.")
@@ -76,6 +99,10 @@ fn main() {
         warn!("cannot overwrite file: {:?}", path);
         return;
     }
-    let f = fs::File::create(path).unwrap();
-    pcap_listen(f, bytes, timeout);
+    let mut f = fs::File::create(path).unwrap();
+    if matches.is_present("mock") {
+        pcap_listen_mock(&mut f, bytes, timeout);
+    } else {
+        pcap_listen(&mut f, bytes, timeout);
+    }
 }
