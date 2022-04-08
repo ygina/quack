@@ -45,3 +45,10 @@ $ ./target/release/benchmark -n 50000 --accumulator cbf --threshold 1000 -p 0.01
 [2022-03-12T00:28:57Z DEBUG accumulator::cbf] solved an ILP with 628 equations in 19170 variables: 3.387916ms
 [2022-03-12T00:26:42Z INFO  benchmark] validation took 11.205708ms
 ```
+
+## End-to-End
+```
+./target/release/router --overwrite --mock
+./target/release/accumulator -a iblt --log log.txt --mock
+./target/release/verifier -a iblt --check-acc-logs log.txt
+```
