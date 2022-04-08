@@ -92,7 +92,7 @@ fn main() {
     let accumulator = get_accumulator(&address, accumulator_type);
     let router_logs = get_router_logs(filename, bytes);
     info!("{}/{} packets received", accumulator.total(), router_logs.len());
-    assert!(accumulator.total() < router_logs.len());
+    assert!(accumulator.total() <= router_logs.len());
     if accumulator.validate(&router_logs) {
         info!("valid router");
     } else {
