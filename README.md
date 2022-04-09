@@ -6,16 +6,19 @@
   in finite fields
 * [GLPK](https://www.gnu.org/software/glpk/): solving ILPs
 
+## Compiling
+To compile the entire workspace, run `cargo b --release` from the
+`subset-digest/` directory. To compile without the PARI and GLPK dependencies,
+run with the `cargo b --release --features disable_validation` feature. The
+compiled binaries can be found in `subset-digest/target/release/`.
+
 ## Tests
 ```
-$ cd accumulator
 $ cargo t -- --test-threads 1
 ```
 
 ## Benchmarks
 ```
-$ cd benchmark
-$ cargo b --release
 $ ./target/release/benchmark --accumulator naive -p 0.02 -n 100 --malicious
 [2022-02-17T21:53:03Z DEBUG benchmark] dropped 2/100 elements
 [2022-02-17T21:53:03Z INFO  benchmark] processed 98 elements in 85.915µs
