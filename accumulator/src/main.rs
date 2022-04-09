@@ -153,7 +153,7 @@ async fn main() {
     let log = matches.value_of("log").map(|filename| {
         info!("{}", filename);
         let path = std::path::Path::new(filename);
-        if path.exists() {
+        if !path.exists() {
             File::create(filename).unwrap();
         }
         OpenOptions::new()
