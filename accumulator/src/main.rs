@@ -50,6 +50,7 @@ async fn pcap_listen(
 ) {
     let device = Device::lookup().unwrap();
     info!("listening on {:?}", device);
+    // TODO: pipe in output from tcpdump instead
     let mut cap = Capture::from_device(device).unwrap()
         .promisc(true)
         .timeout(timeout)

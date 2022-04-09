@@ -47,6 +47,7 @@ fn pcap_listen(
         .open().unwrap();
 
     let mut n: usize = 0;
+    // TODO: this will be whatever the -w option in tcpdump does
     while let Ok(packet) = cap.next() {
         write_data(f, bytes, packet.data);
         n += 1;

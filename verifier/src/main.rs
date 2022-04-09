@@ -86,6 +86,7 @@ fn get_router_logs(
         }
         std::fs::read(filename).unwrap()
     };
+    // TODO: parse pcap format
     let n_packets = data.len() / nbytes;
     (0..n_packets)
         .map(|i| ((i * nbytes), (i+1) * nbytes))
