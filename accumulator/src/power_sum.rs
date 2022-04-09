@@ -1,12 +1,16 @@
+#[cfg(not(feature = "disable_validation"))]
 use std::collections::{HashSet, HashMap};
 use std::hash::Hasher;
+#[cfg(not(feature = "disable_validation"))]
 use std::time::Instant;
 
 use bincode;
 use serde::{Serialize, Deserialize};
 use djb_hash::{HasherU32, x33a_u32::*};
 use num_bigint::BigUint;
+#[cfg(not(feature = "disable_validation"))]
 use tokio::task;
+#[cfg(not(feature = "disable_validation"))]
 use tokio::runtime::Builder;
 use crate::Accumulator;
 use digest::Digest;
@@ -37,6 +41,7 @@ pub struct PowerSumAccumulator {
     power_sums: Vec<i64>,
 }
 
+#[cfg(not(feature = "disable_validation"))]
 #[link(name = "pari", kind = "dylib")]
 extern "C" {
     fn find_integer_monic_polynomial_roots_libpari(
@@ -67,6 +72,7 @@ fn mul_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
 }
 
 // modular division
+#[cfg(not(feature = "disable_validation"))]
 fn div_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     // divide `a` and `b` by the GCD of `a` and `modulo`
     let gcd = {
@@ -113,6 +119,7 @@ fn div_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
     mul_and_mod(a, mmi, modulo)
 }
 
+#[cfg(not(feature = "disable_validation"))]
 async fn calculate_power_sums(elems: &Vec<u32>, num_psums: usize) -> Vec<i64> {
     let ncpus = num_cpus::get();
     let elems_per_thread = elems.len() / ncpus;
@@ -150,6 +157,7 @@ async fn calculate_power_sums(elems: &Vec<u32>, num_psums: usize) -> Vec<i64> {
     power_sums
 }
 
+#[cfg(not(feature = "disable_validation"))]
 fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
     (0..std::cmp::min(lhs.len(), rhs.len()))
         .map(|i| lhs[i] + LARGE_PRIME - rhs[i])
@@ -165,6 +173,7 @@ fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
 // 4*e4 = e3*p0 - e2*p1 + e1*p2 - e0*p3
 // ...
 // Returns the coefficients as positive numbers in the field GF(LARGE_PRIME).
+#[cfg(not(feature = "disable_validation"))]
 fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
     let n = p.len();
     if n == 0 {
@@ -207,6 +216,7 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
     */
 }
 
+#[cfg(not(feature = "disable_validation"))]
 fn find_integer_monic_polynomial_roots(
     coeffs: Vec<i64>,
 ) -> Result<Vec<i64>, String> {
@@ -260,6 +270,12 @@ impl Accumulator for PowerSumAccumulator {
         self.num_elems
     }
 
+    #[cfg(feature = "disable_validation")]
+    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+        panic!("validation not enabled")
+    }
+
+    #[cfg(not(feature = "disable_validation"))]
     fn validate(&self, elems: &Vec<BigUint>) -> bool {
         // The number of power sum equations we need is equal to
         // the number of lost elements. Validation cannot be performed

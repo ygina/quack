@@ -1,14 +1,18 @@
+#[cfg(not(feature = "disable_validation"))]
 use std::time::Instant;
+#[cfg(not(feature = "disable_validation"))]
 use std::collections::HashSet;
 
 use bincode;
 use num_bigint::BigUint;
+#[cfg(not(feature = "disable_validation"))]
 use num_traits::Zero;
 use serde::{Serialize, Deserialize};
 use bloom_sd::InvBloomLookupTable;
 use crate::Accumulator;
 use digest::Digest;
 
+#[cfg(not(feature = "disable_validation"))]
 #[link(name = "glpk", kind = "dylib")]
 extern "C" {
     fn solve_ilp_glpk(
@@ -104,6 +108,12 @@ impl Accumulator for IBLTAccumulator {
         self.num_elems
     }
 
+    #[cfg(feature = "disable_validation")]
+    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+        panic!("validation not enabled")
+    }
+
+    #[cfg(not(feature = "disable_validation"))]
     fn validate(&self, elems: &Vec<BigUint>) -> bool {
         let t1 = Instant::now();
         if elems.len() < self.total() {

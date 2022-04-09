@@ -6,8 +6,10 @@ mod iblt;
 mod naive;
 mod power_sum;
 
+#[cfg(not(feature = "disable_validation"))]
 use std::collections::HashMap;
 use num_bigint::BigUint;
+#[cfg(not(feature = "disable_validation"))]
 use digest::Digest;
 
 pub use cbf::CBFAccumulator;
@@ -31,6 +33,7 @@ pub trait Accumulator {
     fn validate(&self, elems: &Vec<BigUint>) -> bool;
 }
 
+#[cfg(not(feature = "disable_validation"))]
 fn check_digest(
     elems: &Vec<BigUint>,
     mut dropped_count: HashMap<BigUint, usize>,

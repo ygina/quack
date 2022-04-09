@@ -1,5 +1,7 @@
+#[cfg(not(feature = "disable_validation"))]
 use std::time::Instant;
 use bincode;
+#[cfg(not(feature = "disable_validation"))]
 use itertools::Itertools;
 use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
@@ -50,6 +52,12 @@ impl Accumulator for NaiveAccumulator {
         self.num_elems
     }
 
+    #[cfg(feature = "disable_validation")]
+    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+        panic!("validation not enabled")
+    }
+
+    #[cfg(not(feature = "disable_validation"))]
     fn validate(&self, elems: &Vec<BigUint>) -> bool {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
