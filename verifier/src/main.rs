@@ -5,12 +5,17 @@ use std::net::TcpStream;
 use std::io::Read;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::io::Cursor;
 
 use bincode;
 use ssh2::Session;
 use clap::{Arg, Command};
 use num_bigint::BigUint;
 use accumulator::*;
+
+use pcap_parser::*;
+// use pcap_parser::traits::PcapReaderIterator;
+// use std::fs::File;
 
 /// Connect to the SSH server and assert the session is authenticated.
 fn establish_ssh_session(ssh: &str) -> Session {
@@ -67,11 +72,11 @@ fn get_router_logs(
     filename: &str,
     nbytes: usize,
 ) -> Vec<BigUint> {
-    let data = if let Some(ssh) = ssh {
+    let data: Vec<u8> = if let Some(ssh) = ssh {
         let sess = establish_ssh_session(ssh);
         let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
         debug!("remote file size: {}", stat.size());
-        let mut data = Vec::new();
+        let mut data: Vec<u8> = Vec::new();
         f.read_to_end(&mut data).unwrap();
 
         // Close the channel and wait for the whole content to be tranferred
@@ -86,12 +91,30 @@ fn get_router_logs(
         }
         std::fs::read(filename).unwrap()
     };
-    // TODO: parse pcap format
-    let n_packets = data.len() / nbytes;
-    (0..n_packets)
-        .map(|i| ((i * nbytes), (i+1) * nbytes))
-        .map(|(start, end)| BigUint::from_bytes_be(&data[start..end]))
-        .collect()
+
+    // https://docs.rs/pcap-parser/latest/pcap_parser/struct.PcapNGReader.html
+    let mut reader = create_reader(65536, Cursor::new(data)).unwrap();
+    let mut res = Vec::new();
+    loop {
+        match reader.next() {
+            Ok((offset, block)) => {
+                match block {
+                    PcapBlockOwned::Legacy(block) => {
+                        res.push(BigUint::from_bytes_be(&block.data[14..(14 + nbytes)]));
+                    },
+                    _ => { /* println!("Ignoring..."); */ },
+                }
+                reader.consume(offset);
+            },
+            Err(PcapError::Eof) => break,
+            Err(PcapError::Incomplete) => {
+                // eprintln!("reader buffer size may be too small, or input file may be truncated.");
+                break;
+            },
+            Err(e) => eprintln!("error while reading: {:?}", e),
+        }
+    }
+    res
 }
 
 /// Logs seem to have many repeated entries.
@@ -162,6 +185,13 @@ fn check_acc_logs(router_filename: &str, acc_filename: &str, bytes: usize) {
 
 fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
+
+    get_router_logs(
+        None,
+        "out.pcap",
+        16,
+    );
+
     let matches = Command::new("verifier")
         .arg(Arg::new("check-acc-logs")
             .help("Whether to check accumulator logs against router logs. \

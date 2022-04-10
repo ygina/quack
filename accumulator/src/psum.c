@@ -24,7 +24,8 @@ int32_t find_integer_monic_polynomial_roots_libpari(
             // error: cannot be factored
             return -1;
         }
-        roots[i] = field - itos(constant_coeff(f)[2]);
+        // TODO: Masot added cast to shut gcc up
+        roots[i] = field - itos((void*)constant_coeff(f)[2]);
     }
 
     pari_close();
