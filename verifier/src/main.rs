@@ -186,12 +186,6 @@ fn check_acc_logs(router_filename: &str, acc_filename: &str, bytes: usize) {
 fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
 
-    get_router_logs(
-        None,
-        "out.pcap",
-        16,
-    );
-
     let matches = Command::new("verifier")
         .arg(Arg::new("check-acc-logs")
             .help("Whether to check accumulator logs against router logs. \

@@ -6,9 +6,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use clap::{Arg, Command};
-use pcap::{Capture, Device};
-
 fn write_data(f: &mut File, bytes: usize, data: &[u8]) {
     let len = std::cmp::min(data.len(), bytes);
     if len < bytes {
@@ -34,30 +31,32 @@ fn pcap_listen_mock(
 }
 
 fn pcap_listen(
-    f: &mut File,
+    fname: &str,
     bytes: usize,
     timeout: i32,
 ) {
-    let device = Device::lookup().unwrap();
-    info!("listening on {:?}", device);
-    let mut cap = Capture::from_device(device).unwrap()
-        .promisc(true)
-        .timeout(timeout)
-        .snaplen(bytes as i32)
-        .open().unwrap();
+    use std::process::Command;
+    use signal_child::{Signalable, signal};
 
-    let mut n: usize = 0;
-    // TODO: this will be whatever the -w option in tcpdump does
-    while let Ok(packet) = cap.next() {
-        write_data(f, bytes, packet.data);
-        n += 1;
-        if n % 1000 == 0 {
-            debug!("processed {} packets", n);
-        }
-    }
+    let mut child = Command::new("tcpdump")
+        .arg("-w")
+        .arg(fname)
+        .arg("-s")
+        .arg(format!("{}", 14 + bytes))
+        .spawn() .unwrap();
+
+    // TODO: This seems to be dropping lots of packets at the end, call sigusr2 and give it some
+    // extra time before signinting.
+    // https://doc.rust-lang.org/stable/std/thread/fn.sleep.html
+    use std::{thread, time};
+    thread::sleep(time::Duration::from_millis(timeout.try_into().unwrap()));
+    child.signal(signal::SIGUSR2).expect("Error interrupting child");
+    child.signal(signal::SIGINT).expect("Error interrupting child");
+    child.wait().ok();
 }
 
 fn main() {
+    use clap::{Arg, Command};
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
     let matches = Command::new("router")
         .arg(Arg::new("timeout")
@@ -80,7 +79,7 @@ fn main() {
             .short('f')
             .long("filename")
             .takes_value(true)
-            .default_value("router.txt"))
+            .default_value("router.pcap"))
         .arg(Arg::new("bytes")
             .help("Number of bytes to record from each packet. Default is \
                 128 bits = 16 bytes.")
@@ -104,6 +103,7 @@ fn main() {
     if matches.is_present("mock") {
         pcap_listen_mock(&mut f, bytes, timeout);
     } else {
-        pcap_listen(&mut f, bytes, timeout);
+        drop(f);
+        pcap_listen(&filename, bytes, timeout);
     }
 }
