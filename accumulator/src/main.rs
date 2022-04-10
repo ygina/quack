@@ -50,7 +50,7 @@ async fn pcap_listen(
     timeout: i32,
 ) {
     use std::process::{Command, Stdio};
-    use signal_child::{Signalable, signal};
+    use std::time::Instant;
     let mut child = Command::new("tcpdump")
         .arg("-w")
         .arg("/dev/stdout")
@@ -61,9 +61,16 @@ async fn pcap_listen(
 
     let stdout = child.stdout.as_mut().unwrap();
 
+    let now = Instant::now();
     let mut reader = create_reader(65536, stdout).unwrap();
     let mut n: usize = 0;
     loop {
+        // TODO: This isn't perfect, because tcpdump is set up to buffer so reader.next() could
+        // theoretically block for an arbitrarily long period of time.
+        let elapsed_time = now.elapsed();
+        if elapsed_time.as_millis() > timeout.try_into().unwrap() {
+            break;
+        }
         match reader.next() {
             Ok((offset, block)) => {
                 match block {
