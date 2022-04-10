@@ -8,8 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use clap::{Arg, Command};
 use num_bigint::BigUint;
-use pcap::{Capture, Device};
 use accumulator::*;
+
+use pcap_parser::*;
 
 fn write_data(f: &mut File, bytes: usize, data: &[u8]) {
     let len = std::cmp::min(data.len(), bytes);
@@ -48,31 +49,55 @@ async fn pcap_listen(
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     timeout: i32,
 ) {
-    let device = Device::lookup().unwrap();
-    info!("listening on {:?}", device);
-    // TODO: pipe in output from tcpdump instead
-    let mut cap = Capture::from_device(device).unwrap()
-        .promisc(true)
-        .timeout(timeout)
-        .snaplen(bytes as i32)
-        .open().unwrap();
+    use std::process::{Command, Stdio};
+    use signal_child::{Signalable, signal};
+    let mut child = Command::new("tcpdump")
+        .arg("-w")
+        .arg("/dev/stdout")
+        .arg("-s")
+        .arg(format!("{}", 14 + bytes))
+        .stdout(Stdio::piped())
+        .spawn() .unwrap();
 
+    let stdout = child.stdout.as_mut().unwrap();
+
+    let mut reader = create_reader(65536, stdout).unwrap();
     let mut n: usize = 0;
-    while let Ok(packet) = cap.next() {
-        let len = std::cmp::min(packet.data.len(), bytes as usize);
-        let elem = BigUint::from_bytes_be(&packet.data[..len]);
-        // NOTE: many of these elements are not unique
-        // TODO: probably slow to put a lock around each packet.
-        // Maybe we can buffer and batch.
-        let mut accumulator = accumulator.lock().unwrap();
-        accumulator.process(&elem);
-        if let Some(f) = log.as_mut() {
-            write_data(f, bytes, &packet.data[..len]);
-        }
-        drop(accumulator);
-        n += 1;
-        if n % 1000 == 0 {
-            debug!("processed {} packets", n);
+    loop {
+        match reader.next() {
+            Ok((offset, block)) => {
+                match block {
+                    PcapBlockOwned::Legacy(block) => {
+                        if block.data.len() < 14 {
+                            println!("TOO SMALL");
+                            continue;
+                        }
+                        let hi = std::cmp::min(block.data.len(), 14 + bytes as usize);
+                        let elem = BigUint::from_bytes_be(&block.data[14..hi]);
+                        // NOTE: many of these elements are not unique
+                        // TODO: probably slow to put a lock around each packet.
+                        // Maybe we can buffer and batch.
+                        let mut accumulator = accumulator.lock().unwrap();
+                        accumulator.process(&elem);
+                        if let Some(f) = log.as_mut() {
+                            write_data(f, bytes, &block.data[14..hi]);
+                        }
+                        drop(accumulator);
+                        n += 1;
+                        if n % 1000 == 0 {
+                            debug!("processed {} packets", n);
+                        }
+                    },
+                    _ => { /* println!("Ignoring..."); */ },
+                }
+                reader.consume(offset);
+            },
+            Err(PcapError::Eof) => break,
+            Err(PcapError::Incomplete) => {
+                // eprintln!("reader buffer size may be too small, or input file may be truncated.");
+                break;
+            },
+            Err(e) => eprintln!("error while reading: {:?}", e),
         }
     }
 }
