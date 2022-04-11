@@ -69,6 +69,7 @@ async fn pcap_listen(
         // theoretically block for an arbitrarily long period of time.
         let elapsed_time = now.elapsed();
         if elapsed_time.as_millis() > timeout.try_into().unwrap() {
+            debug!("timeout");
             break;
         }
         match reader.next() {
@@ -76,7 +77,7 @@ async fn pcap_listen(
                 match block {
                     PcapBlockOwned::Legacy(block) => {
                         if block.data.len() < 14 {
-                            println!("TOO SMALL");
+                            warn!("TOO SMALL");
                             continue;
                         }
                         let hi = std::cmp::min(block.data.len(), 14 + bytes as usize);
@@ -91,20 +92,29 @@ async fn pcap_listen(
                         }
                         drop(accumulator);
                         n += 1;
+                        debug!("processed {} packets block {:?} offset={}", n, block.data, offset);
                         if n % 1000 == 0 {
                             debug!("processed {} packets", n);
                         }
                     },
-                    _ => { /* println!("Ignoring..."); */ },
+                    PcapBlockOwned::NG(block) => {
+                        debug!("ignoring NG({:?}) offset={}", block, offset);
+                    },
+                    PcapBlockOwned::LegacyHeader(block) => {
+                        debug!("ignoring LegacyHeader({:?}) offset={}", block, offset);
+                    },
                 }
                 reader.consume(offset);
             },
-            Err(PcapError::Eof) => break,
-            Err(PcapError::Incomplete) => {
-                // eprintln!("reader buffer size may be too small, or input file may be truncated.");
+            Err(PcapError::Eof) => {
+                debug!("eof");
                 break;
             },
-            Err(e) => eprintln!("error while reading: {:?}", e),
+            Err(PcapError::Incomplete) => {
+                warn!("reader buffer size may be too small, or input file may be truncated.");
+                break;
+            },
+            Err(e) => error!("error while reading: {:?}", e),
         }
     }
 }

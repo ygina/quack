@@ -19,6 +19,7 @@ fn pcap_listen_mock(
     bytes: usize,
     _timeout: i32,
 ) {
+    warn!("mock data - not an actual pcap file");
     let packets = vec![
         vec![125; bytes],
         vec![50; bytes - 1],
@@ -38,12 +39,14 @@ fn pcap_listen(
     use std::process::Command;
     use signal_child::{Signalable, signal};
 
+    debug!("listening on tcpdump");
     let mut child = Command::new("tcpdump")
         .arg("-w")
         .arg(fname)
         .arg("-s")
         .arg(format!("{}", 14 + bytes))
-        .spawn() .unwrap();
+        .spawn()
+        .unwrap();
 
     // TODO: This seems to be dropping lots of packets at the end, call sigusr2 and give it some
     // extra time before signinting.
@@ -53,6 +56,7 @@ fn pcap_listen(
     child.signal(signal::SIGUSR2).expect("Error interrupting child");
     child.signal(signal::SIGINT).expect("Error interrupting child");
     child.wait().ok();
+    info!("exiting");
 }
 
 fn main() {
@@ -99,6 +103,7 @@ fn main() {
         warn!("cannot overwrite file: {:?}", path);
         return;
     }
+    info!("writing router data to {}", filename);
     let mut f = fs::File::create(path).unwrap();
     if matches.is_present("mock") {
         pcap_listen_mock(&mut f, bytes, timeout);

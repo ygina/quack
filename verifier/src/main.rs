@@ -73,6 +73,7 @@ fn get_router_logs(
     nbytes: usize,
 ) -> Vec<BigUint> {
     let data: Vec<u8> = if let Some(ssh) = ssh {
+        debug!("reading router logs from {}", ssh);
         let sess = establish_ssh_session(ssh);
         let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
         debug!("remote file size: {}", stat.size());
@@ -89,6 +90,7 @@ fn get_router_logs(
         if !std::path::Path::new(filename).exists() {
             panic!("file does not exist: {}", filename);
         }
+        debug!("reading router logs from {}", filename);
         std::fs::read(filename).unwrap()
     };
 
@@ -106,14 +108,19 @@ fn get_router_logs(
                 }
                 reader.consume(offset);
             },
-            Err(PcapError::Eof) => break,
-            Err(PcapError::Incomplete) => {
-                // eprintln!("reader buffer size may be too small, or input file may be truncated.");
+            Err(PcapError::Eof) => {
+                debug!("reached eof");
                 break;
             },
-            Err(e) => eprintln!("error while reading: {:?}", e),
+            Err(PcapError::Incomplete) => {
+                debug!("reader buffer size may be too small, or input file \
+                   may be truncated.");
+                break;
+            },
+            Err(e) => error!("error while reading: {:?}", e),
         }
     }
+    debug!("parsed {} packets", res.len());
     res
 }
 
@@ -203,7 +210,7 @@ fn main() {
             .short('f')
             .long("filename")
             .takes_value(true)
-            .default_value("router.txt"))
+            .default_value("router.pcap"))
         .arg(Arg::new("bytes")
             .help("Number of bytes recorded from each packet. Default is \
                 128 bits = 16 bytes.")
