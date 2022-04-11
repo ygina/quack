@@ -99,9 +99,11 @@ fn get_router_logs(
     let mut reader = create_reader(65536, Cursor::new(data)).unwrap();
     let mut res = Vec::new();
     let mut n = 0;
+    let mut maybe_truncated = false;
     loop {
         match reader.next() {
             Ok((offset, block)) => {
+                maybe_truncated = false;
                 match block {
                     PcapBlockOwned::Legacy(block) => {
                         n += 1;
@@ -124,8 +126,12 @@ fn get_router_logs(
                 break;
             },
             Err(PcapError::Incomplete) => {
-                debug!("reader buffer size may be too small, or input file \
-                   may be truncated.");
+                if maybe_truncated {
+                    debug!("input file may be truncated");
+                    break;
+                }
+                trace!("reader buffer size is too small");
+                maybe_truncated = true;
                 reader.refill().unwrap();
             },
             Err(e) => error!("error while reading: {:?}", e),
