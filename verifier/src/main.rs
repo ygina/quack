@@ -213,7 +213,7 @@ fn main() {
     let matches = Command::new("verifier")
         .arg(Arg::new("check-acc-logs")
             .help("Whether to check accumulator logs against router logs. \
-                FOR DEBUGGING ONLY. (suggested: log.txt)")
+                FOR DEBUGGING ONLY. (suggested: accum.pcap)")
             .long("check-acc-logs")
             .takes_value(true))
         .arg(Arg::new("port")

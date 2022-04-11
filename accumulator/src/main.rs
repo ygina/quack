@@ -21,7 +21,7 @@ fn write_data(f: &mut File, bytes: usize, data: &[u8]) {
 }
 
 async fn pcap_listen_mock(
-    mut log: Option<File>,
+    log: Option<&str>,
     bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     _timeout: i32,
@@ -31,6 +31,16 @@ async fn pcap_listen_mock(
         vec![50; bytes - 1],
         vec![26; bytes + 1],
     ];
+    let mut log = log.map(|filename| {
+        let path = std::path::Path::new(filename);
+        if !path.exists() {
+            File::create(filename).unwrap();
+        }
+        OpenOptions::new()
+            .append(true)
+            .open(filename)
+            .unwrap()
+    });
     let mut accumulator = accumulator.lock().unwrap();
     for data in packets {
         let len = std::cmp::min(data.len(), bytes as usize);
@@ -44,21 +54,34 @@ async fn pcap_listen_mock(
 }
 
 async fn pcap_listen(
-    mut log: Option<File>,
+    log: Option<&str>,
     bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     timeout: i32,
 ) {
     use std::process::{Command, Stdio};
     use std::time::Instant;
-    let mut child = Command::new("tcpdump")
-        .arg("--immediate-mode")
-        .arg("-w")
-        .arg("/dev/stdout")
-        .arg("-s")
-        .arg(format!("{}", 14 + bytes))
-        .stdout(Stdio::piped())
-        .spawn() .unwrap();
+    let mut child = {
+        let tcpdump = Command::new("tcpdump")
+            .arg("--immediate-mode")
+            .arg("-w")
+            .arg("/dev/stdout")
+            .arg("-s")
+            .arg(format!("{}", 14 + bytes))
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        if let Some(log_filename) = log {
+            Command::new("tee")
+                .arg(log_filename)
+                .stdin(tcpdump.stdout.unwrap())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap()
+        } else {
+            tcpdump
+        }
+    };
 
     let stdout = child.stdout.as_mut().unwrap();
 
@@ -88,9 +111,6 @@ async fn pcap_listen(
                         // Maybe we can buffer and batch.
                         let mut accumulator = accumulator.lock().unwrap();
                         accumulator.process(&elem);
-                        if let Some(f) = log.as_mut() {
-                            write_data(f, bytes, &block.data[14..hi]);
-                        }
                         drop(accumulator);
                         n += 1;
                         trace!("processed {} packets block {:?} offset={}", n, block.data, offset);
@@ -148,7 +168,7 @@ async fn main() {
             .help("Whether to log data received in PCAP. FOR DEBUGGING \
                 PURPOSES ONLY. Normally, the device running the accumulator \
                 would not have enough space to maintain these logs. Writes \
-                to the given filename (suggested: log.txt).")
+                to the given filename (suggested: accum.pcap).")
             .long("log")
             .takes_value(true))
         .arg(Arg::new("timeout")
@@ -194,17 +214,7 @@ async fn main() {
     let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
-    let log = matches.value_of("log").map(|filename| {
-        info!("{}", filename);
-        let path = std::path::Path::new(filename);
-        if !path.exists() {
-            File::create(filename).unwrap();
-        }
-        OpenOptions::new()
-            .append(true)
-            .open(filename)
-            .unwrap()
-    });
+    let log = matches.value_of("log");
     let accumulator: Box<dyn Accumulator + Send> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
             .parse().unwrap();
