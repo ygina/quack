@@ -52,6 +52,7 @@ async fn pcap_listen(
     use std::process::{Command, Stdio};
     use std::time::Instant;
     let mut child = Command::new("tcpdump")
+        .arg("--immediate-mode")
         .arg("-w")
         .arg("/dev/stdout")
         .arg("-s")
@@ -92,7 +93,7 @@ async fn pcap_listen(
                         }
                         drop(accumulator);
                         n += 1;
-                        debug!("processed {} packets block {:?} offset={}", n, block.data, offset);
+                        trace!("processed {} packets block {:?} offset={}", n, block.data, offset);
                         if n % 1000 == 0 {
                             debug!("processed {} packets", n);
                         }
@@ -111,8 +112,8 @@ async fn pcap_listen(
                 break;
             },
             Err(PcapError::Incomplete) => {
-                warn!("reader buffer size may be too small, or input file may be truncated.");
-                break;
+                trace!("reader buffer size may be too small, or input file may be truncated.");
+                reader.refill().unwrap();
             },
             Err(e) => error!("error while reading: {:?}", e),
         }

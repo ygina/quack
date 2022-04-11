@@ -95,16 +95,27 @@ fn get_router_logs(
     };
 
     // https://docs.rs/pcap-parser/latest/pcap_parser/struct.PcapNGReader.html
+    debug!("parsing pcap format {} bytes", data.len());
     let mut reader = create_reader(65536, Cursor::new(data)).unwrap();
     let mut res = Vec::new();
+    let mut n = 0;
     loop {
         match reader.next() {
             Ok((offset, block)) => {
                 match block {
                     PcapBlockOwned::Legacy(block) => {
+                        n += 1;
                         res.push(BigUint::from_bytes_be(&block.data[14..(14 + nbytes)]));
+                        if n % 1000 == 0 {
+                            debug!("processed {} packets", n);
+                        }
                     },
-                    _ => { /* println!("Ignoring..."); */ },
+                    PcapBlockOwned::NG(block) => {
+                        debug!("ignoring NG({:?}) offset={}", block, offset);
+                    },
+                    PcapBlockOwned::LegacyHeader(block) => {
+                        debug!("ignoring LegacyHeader({:?}) offset={}", block, offset);
+                    },
                 }
                 reader.consume(offset);
             },
@@ -115,7 +126,7 @@ fn get_router_logs(
             Err(PcapError::Incomplete) => {
                 debug!("reader buffer size may be too small, or input file \
                    may be truncated.");
-                break;
+                reader.refill().unwrap();
             },
             Err(e) => error!("error while reading: {:?}", e),
         }
