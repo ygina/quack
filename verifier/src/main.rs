@@ -154,13 +154,31 @@ fn to_map(logs: &Vec<BigUint>) -> HashMap<BigUint, usize> {
 /// Compares maps to each other. Metrics include number of entries, number of
 /// shared keys, and counts of shared keys.
 fn compare_maps(m1: HashMap<BigUint, usize>, m2: HashMap<BigUint, usize>) {
+    let mut is_subset = true;
+    for (k, v2) in m2.iter() {
+        if let Some(v1) = m1.get(k) {
+            if v1 < v2 {
+                is_subset = false;
+                break;
+            }
+        } else {
+            is_subset = false;
+            break;
+        }
+    }
+    if is_subset {
+        info!("m2 is a subset of m1");
+    } else {
+        warn!("m2 is not a subset of m1");
+    }
+
     if m1.len() == m2.len() {
         debug!("both maps have {} entries", m1.len());
     } else {
         debug!("# entries differs: {} != {}", m1.len(), m2.len());
     }
     let m1_keys = m1.keys().collect::<HashSet<_>>();
-    let m2_keys = m1.keys().collect::<HashSet<_>>();
+    let m2_keys = m2.keys().collect::<HashSet<_>>();
     let mut shared_keys: HashSet<BigUint> = HashSet::new();
     let mut m1_only: HashSet<BigUint> = HashSet::new();
     let mut m2_only: HashSet<BigUint> = HashSet::new();
