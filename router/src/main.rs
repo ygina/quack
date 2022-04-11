@@ -42,6 +42,10 @@ fn pcap_listen(
     debug!("listening on tcpdump");
     let mut child = Command::new("tcpdump")
         .arg("--immediate-mode")
+        .arg("-i")
+        .arg("eth0.2")
+        .arg("-Q")
+        .arg("out")
         .arg("-w")
         .arg(fname)
         .arg("-s")

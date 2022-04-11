@@ -222,15 +222,21 @@ fn compare_maps(m1: HashMap<BigUint, usize>, m2: HashMap<BigUint, usize>) {
 }
 
 /// Check the accumulator logs against the router logs (DEBUGGING ONLY).
-fn check_acc_logs(router_filename: &str, acc_filename: &str, bytes: usize) {
+fn check_acc_logs(
+    router_ssh: Option<Vec<&str>>,
+    acc_ssh: Option<Vec<&str>>,
+    router_filename: &str,
+    acc_filename: &str,
+    bytes: usize,
+) {
     info!("router logs:");
-    let router_logs = get_router_logs(None, router_filename, bytes);
+    let router_logs = get_router_logs(router_ssh, router_filename, bytes);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
         println!("{:X}", router_logs[i]);
     }
     info!("accumulator logs:");
-    let accumulator_logs = get_router_logs(None, acc_filename, bytes);
+    let accumulator_logs = get_router_logs(acc_ssh, acc_filename, bytes);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
         println!("{:X}", accumulator_logs[i]);
@@ -300,18 +306,27 @@ fn main() {
     let filename = matches.value_of("filename").unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let accumulator_type = matches.value_of("accumulator").unwrap();
+    let accumulator_ssh = matches.values_of("accumulator-ssh").map(|ssh|
+       ssh.collect());
+    let router_ssh = matches.values_of("router-ssh").map(|ssh| ssh.collect());
 
     if let Some(acc_filename) = matches.value_of("check-acc-logs") {
-        check_acc_logs(filename, acc_filename, bytes)
+        check_acc_logs(
+            router_ssh.clone(),
+            accumulator_ssh.clone(),
+            filename,
+            acc_filename,
+            bytes,
+        )
     }
 
     let accumulator = get_accumulator(
-        matches.values_of("accumulator-ssh").map(|ssh| ssh.collect()),
+        accumulator_ssh,
         port,
         accumulator_type,
     );
     let router_logs = get_router_logs(
-        matches.values_of("router-ssh").map(|ssh| ssh.collect()),
+        router_ssh,
         filename,
         bytes,
     );
