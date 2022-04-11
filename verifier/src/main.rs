@@ -227,13 +227,13 @@ fn check_acc_logs(router_filename: &str, acc_filename: &str, bytes: usize) {
     let router_logs = get_router_logs(None, router_filename, bytes);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
-        println!("{:?}", router_logs[i]);
+        println!("{:X}", router_logs[i]);
     }
     info!("accumulator logs:");
     let accumulator_logs = get_router_logs(None, acc_filename, bytes);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
-        println!("{:?}", accumulator_logs[i]);
+        println!("{:X}", accumulator_logs[i]);
     }
     compare_maps(router_logs_map, accumulator_logs_map);
 }
