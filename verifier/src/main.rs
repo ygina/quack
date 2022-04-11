@@ -18,12 +18,22 @@ use pcap_parser::*;
 // use std::fs::File;
 
 /// Connect to the SSH server and assert the session is authenticated.
-fn establish_ssh_session(ssh: &str) -> Session {
-    let tcp = TcpStream::connect(ssh).unwrap();
+fn establish_ssh_session(
+    addr: &str,
+    username: &str,
+    private_key_file: &str,
+) -> Session {
+    debug!("establishing ssh connection to {}", addr);
+    let tcp = TcpStream::connect(addr).unwrap();
     let mut sess = Session::new().unwrap();
     sess.set_tcp_stream(tcp);
     sess.handshake().unwrap();
-    sess.userauth_agent("username").unwrap();
+    sess.userauth_pubkey_file(
+        username,
+        None,
+        Path::new(private_key_file),
+        None,
+    ).unwrap();
     assert!(sess.authenticated());
     sess
 }
@@ -33,19 +43,23 @@ fn establish_ssh_session(ssh: &str) -> Session {
 /// TODO: SSH into Pi and call the TCP service from there since
 /// the TCP port shouldn't be externally exposed.
 fn get_accumulator(
-    ssh: Option<&str>,
+    ssh: Option<Vec<&str>>,
     port: u32,
     ty: &str,
 ) -> Box<dyn Accumulator> {
     let mut buf = Vec::new();
     if let Some(ssh) = ssh {
-        let sess = establish_ssh_session(ssh);
+        let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
         let mut channel = sess.channel_session().unwrap();
-        let cmd = format!("nc -v 127.0.0.1 {}", port);
+        let cmd = format!("cat /dev/null | nc -v 127.0.0.1 {}", port);
         channel.exec(&cmd).unwrap();
         channel.read_to_end(&mut buf).unwrap();
         channel.wait_close().unwrap();
-        debug!("channel exit status: {}", channel.exit_status().unwrap())
+        let exit_status = channel.exit_status().unwrap();
+        if exit_status != 0 {
+            error!("channel exit status: {}", exit_status);
+            panic!("error retrieving accumulator digest");
+        }
     } else {
         let address = format!("127.0.0.1:{}", port);
         let mut stream = TcpStream::connect(address).unwrap();
@@ -68,13 +82,12 @@ fn get_accumulator(
 /// - `nbytes`: number of bytes per packet
 /// TODO: SFTP logs from router.
 fn get_router_logs(
-    ssh: Option<&str>,
+    ssh: Option<Vec<&str>>,
     filename: &str,
     nbytes: usize,
 ) -> Vec<BigUint> {
     let data: Vec<u8> = if let Some(ssh) = ssh {
-        debug!("reading router logs from {}", ssh);
-        let sess = establish_ssh_session(ssh);
+        let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
         let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
         debug!("remote file size: {}", stat.size());
         let mut data: Vec<u8> = Vec::new();
@@ -254,15 +267,23 @@ fn main() {
             .takes_value(true)
             .default_value("16"))
         .arg(Arg::new("router-ssh")
-            .help("Address of the router to SSH into, if not local, i.e. \
-                `1.2.3.4:22`.")
+            .help("Address of the router to SSH into (if not local) i.e. \
+                `openwrt.lan:22`, the username, and the path to the private \
+                key file.")
             .long("router-ssh")
-            .takes_value(true))
+            .takes_value(true)
+            .multiple_values(true)
+            .number_of_values(3)
+            .value_names(&["address", "username", "private_key_file"]))
         .arg(Arg::new("accumulator-ssh")
-            .help("Address of the accumulator to SSH into, if not local, i.e. \
-                `1.2.3.4:22`.")
+            .help("Address of the accumulator to SSH into (if not local) i.e. \
+                `openwrt.lan:22`, the username, and the path to the private \
+                key file.")
             .long("accumulator-ssh")
-            .takes_value(true))
+            .takes_value(true)
+            .multiple_values(true)
+            .number_of_values(3)
+            .value_names(&["address", "username", "private_key_file"]))
         .arg(Arg::new("accumulator")
             .help("")
             .short('a')
@@ -279,17 +300,18 @@ fn main() {
     let filename = matches.value_of("filename").unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let accumulator_type = matches.value_of("accumulator").unwrap();
+
     if let Some(acc_filename) = matches.value_of("check-acc-logs") {
         check_acc_logs(filename, acc_filename, bytes)
     }
 
     let accumulator = get_accumulator(
-        matches.value_of("accumulator-ssh"),
+        matches.values_of("accumulator-ssh").map(|ssh| ssh.collect()),
         port,
         accumulator_type,
     );
     let router_logs = get_router_logs(
-        matches.value_of("router-ssh"),
+        matches.values_of("router-ssh").map(|ssh| ssh.collect()),
         filename,
         bytes,
     );
