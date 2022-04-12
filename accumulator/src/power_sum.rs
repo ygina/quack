@@ -14,6 +14,8 @@ use tokio::task;
 use tokio::runtime::Builder;
 use crate::Accumulator;
 use digest::Digest;
+#[cfg(not(feature = "disable_validation"))]
+use itertools::Itertools;
 
 /// I picked some random prime number in the range [2^32, 2^64] from
 /// https://en.wikipedia.org/wiki/List_of_prime_numbers.
@@ -340,35 +342,97 @@ impl Accumulator for PowerSumAccumulator {
         // calculating the digest from the element list with those packets
         // removed yields the same digest, then verification succeeds.
         let t5 = Instant::now();
-        let mut dropped_count: HashMap<u32, usize> = HashMap::new();
-        for root in roots {
-            let root = u32::try_from(root);
-            if root.is_err() {
-                return false;  // Root is not in the packet domain.
+        // Map from u32 root to multiplicity.
+        let dropped_counts: HashMap<u32, usize> = {
+            let mut map = HashMap::new();
+            for root in roots {
+                let root = u32::try_from(root);
+                if root.is_err() {
+                    return false;  // Root is not in the packet domain.
+                }
+                let count = map.entry(root.unwrap()).or_insert(0);
+                *count += 1;
             }
-            let count = dropped_count.entry(root.unwrap()).or_insert(0);
-            *count += 1;
-        }
+            map
+        };
 
         let mut digest = Digest::new();
-        let mut collisions = HashSet::new();
+        let mut collisions: HashMap<u32, Vec<BigUint>> = HashMap::new();
         for elem in elems {
             let elem_u32 = elem_to_u32(elem);
-            if !collisions.insert(elem_u32) {
-                panic!("not handling djb collisions");
-            }
-            if let Some(count) = dropped_count.remove(&elem_u32) {
-                if count > 0 {
-                    dropped_count.insert(elem_u32, count - 1);
-                }
-            } else {
+            if !dropped_counts.contains_key(&elem_u32) {
+                // If an element in the log doesn't hash to a u32 root,
+                // it wasn't dropped, so add it to the digest.
                 digest.add(elem);
+            } else {
+                // Otherwise collect every element that maps to a u32 root.
+                collisions.entry(elem_u32).or_insert(vec![]).push(elem.clone());
             }
         }
-        let res = digest.equals(&self.digest);
         let t6 = Instant::now();
-        debug!("recalculated digest: {:?}", t6 - t5);
-        res
+        debug!("created dropped_counts and collisions maps: {:?}", t6 - t5);
+
+        let mut combinations = vec![];
+        let mut dropped = 0;
+        for (elem_u32, &dropped_count) in dropped_counts.iter() {
+            if let Some(elems) = collisions.get(&elem_u32) {
+                if dropped_count == elems.len() {
+                    // they are all dropped
+                    dropped += dropped_count;
+                } else if dropped_count > elems.len() {
+                    error!("more elements dropped than exist candidates");
+                    return false;
+                } else {
+                    let received_count = elems.len() - dropped_count;
+                    if elems.iter().collect::<HashSet<_>>().len() == 1 {
+                        // only one unique element so it was dropped
+                        digest.add_all(&elems[..received_count].to_vec());
+                        dropped += dropped_count;
+                        continue;
+                    }
+                    warn!("{} elems for {} slots", elems.len(), dropped_count);
+                    // Narrow down the combinations we need to try.
+                    let mut map = HashMap::new();
+                    for elem in elems {
+                        let entry = map.entry(elem).or_insert(0);
+                        if *entry < dropped_count {
+                            *entry += 1;
+                        } else {
+                            // By Pigeonhole it couldn't have been dropped
+                            digest.add(elem);
+                        }
+                    }
+                    combinations.push(map.into_iter()
+                        .flat_map(|(elem, count)| vec![elem.clone(); count])
+                        .collect::<Vec<BigUint>>()
+                        .into_iter()
+                        .combinations(received_count));
+                    dropped += dropped_count;
+                }
+            } else {
+                error!("dropped element does not exist in log: {}", elem_u32);
+                return false;
+            }
+        }
+        let t7 = Instant::now();
+        debug!("prepared combos for resolving djb collisions: {:?}", t7 - t6);
+
+        info!("accounted for {} dropped elements", dropped);
+        let mut n_digests = 0;
+        for curr in combinations.into_iter().multi_cartesian_product() {
+            // check curr, if good return it else return None
+            let mut digest = digest.clone();
+            for elem in curr.into_iter().flat_map(|val| val) {
+                digest.add(&elem);
+            }
+            n_digests += 1;
+            if digest.equals(&self.digest) {
+                return true;
+            }
+        }
+        let t8 = Instant::now();
+        debug!("recalculated {} digests: {:?}", n_digests, t8 - t7);
+        false
     }
 }
 

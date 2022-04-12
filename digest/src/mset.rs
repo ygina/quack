@@ -9,7 +9,7 @@ use sha3::{Digest, Sha3_256};
 use crate::BigUintDef;
 
 /// Incremental additive multiset hash.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdditiveMsetHash {
     #[serde(with = "BigUintDef")]
     hash: BigUint,
