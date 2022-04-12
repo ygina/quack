@@ -432,7 +432,7 @@ impl Accumulator for PowerSumAccumulator {
         }
         let t8 = Instant::now();
         debug!("recalculated {} digests: {:?}", n_digests, t8 - t7);
-        false
+        digest.equals(&self.digest)
     }
 }
 
