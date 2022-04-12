@@ -96,6 +96,12 @@ mod tests {
     }
 
     #[test]
+    fn naive_all_dropped() {
+        let accumulator = NaiveAccumulator::new();
+        base_accumulator_test(Box::new(accumulator), 100, 0, false);
+    }
+
+    #[test]
     fn naive_one_dropped() {
         let accumulator = NaiveAccumulator::new();
         base_accumulator_test(Box::new(accumulator), 100, 1, false);
@@ -138,6 +144,12 @@ mod tests {
 
     #[test]
     fn power_sum_none_dropped() {
+        let accumulator = PowerSumAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 0, false);
+    }
+
+    #[test]
+    fn power_sum_all_dropped() {
         let accumulator = PowerSumAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 100, 0, false);
     }
@@ -186,6 +198,12 @@ mod tests {
     }
 
     #[test]
+    fn cbf_all_dropped() {
+        let accumulator = CBFAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 100, false);
+    }
+
+    #[test]
     fn cbf_one_dropped() {
         let accumulator = CBFAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 100, 1, false);
@@ -227,6 +245,12 @@ mod tests {
     fn iblt_none_dropped() {
         let accumulator = IBLTAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 100, 0, false);
+    }
+
+    #[test]
+    fn iblt_all_dropped() {
+        let accumulator = IBLTAccumulator::new(100);
+        base_accumulator_test(Box::new(accumulator), 100, 100, false);
     }
 
     #[test]

@@ -277,6 +277,10 @@ impl Accumulator for PowerSumAccumulator {
 
     #[cfg(not(feature = "disable_validation"))]
     fn validate(&self, elems: &Vec<BigUint>) -> bool {
+        if self.total() == 0 {
+            warn!("no elements received, valid by default");
+            return true;
+        }
         // The number of power sum equations we need is equal to
         // the number of lost elements. Validation cannot be performed
         // if this number exceeds the threshold.
