@@ -89,7 +89,7 @@ fn get_router_logs(
     let data: Vec<u8> = if let Some(ssh) = ssh {
         let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
         let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
-        debug!("remote file size: {}", stat.size());
+        debug!("remote file size ({}): {}", filename, stat.size());
         let mut data: Vec<u8> = Vec::new();
         f.read_to_end(&mut data).unwrap();
 
@@ -155,22 +155,22 @@ fn get_router_logs(
 }
 
 /// Logs seem to have many repeated entries.
-/// Maps log values to number of occurrences.
-fn to_map(logs: &Vec<BigUint>) -> HashMap<BigUint, usize> {
-    let mut map: HashMap<BigUint, usize> = HashMap::new();
-    for entry in logs {
-        *map.entry(entry.clone()).or_insert(0) += 1;
+/// Maps log values to indexes at which they occur.
+fn to_map(logs: &Vec<BigUint>) -> HashMap<BigUint, Vec<usize>> {
+    let mut map: HashMap<BigUint, Vec<usize>> = HashMap::new();
+    for (i, entry) in logs.iter().enumerate() {
+        (*map.entry(entry.clone()).or_insert(vec![])).push(i+1);
     }
     map
 }
 
 /// Compares maps to each other. Metrics include number of entries, number of
 /// shared keys, and counts of shared keys.
-fn compare_maps(m1: HashMap<BigUint, usize>, m2: HashMap<BigUint, usize>) {
+fn compare_maps(m1: HashMap<BigUint, Vec<usize>>, m2: HashMap<BigUint, Vec<usize>>) {
     let mut is_subset = true;
     for (k, v2) in m2.iter() {
         if let Some(v1) = m1.get(k) {
-            if v1 < v2 {
+            if v1.len() < v2.len() {
                 is_subset = false;
                 break;
             }
@@ -215,9 +215,18 @@ fn compare_maps(m1: HashMap<BigUint, usize>, m2: HashMap<BigUint, usize>) {
     for k in &shared_keys {
         let m1_v = m1.get(k).unwrap();
         let m2_v = m2.get(k).unwrap();
-        if m1_v != m2_v {
-            debug!("shared key {} values differ: {} != {}", k, m1_v, m2_v);
+        if m1_v.len() < m2_v.len() {
+            debug!("shared key 0x{:X} values differ: {:?} < {:?}", k, m1_v,
+               m2_v);
         }
+    }
+    // debug!("keys in m1 but not m2: {}", m1_only.len());
+    // for k in m1_only {
+    //     println!("0x{:X} {:?}", k, m1.get(&k).unwrap());
+    // }
+    debug!("keys in m2 but not m1: {}", m2_only.len());
+    for k in m2_only {
+        println!("0x{:X} {:?}", k, m2.get(&k).unwrap());
     }
 }
 
@@ -233,13 +242,13 @@ fn check_acc_logs(
     let router_logs = get_router_logs(router_ssh, router_filename, bytes);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
-        println!("{:X}", router_logs[i]);
+        println!("0x{:X}", router_logs[i]);
     }
     info!("accumulator logs:");
     let accumulator_logs = get_router_logs(acc_ssh, acc_filename, bytes);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
-        println!("{:X}", accumulator_logs[i]);
+        println!("0x{:X}", accumulator_logs[i]);
     }
     compare_maps(router_logs_map, accumulator_logs_map);
 }
@@ -318,23 +327,23 @@ fn main() {
             acc_filename,
             bytes,
         )
-    }
-
-    let accumulator = get_accumulator(
-        accumulator_ssh,
-        port,
-        accumulator_type,
-    );
-    let router_logs = get_router_logs(
-        router_ssh,
-        filename,
-        bytes,
-    );
-    info!("{}/{} packets received", accumulator.total(), router_logs.len());
-    assert!(accumulator.total() <= router_logs.len());
-    if accumulator.validate(&router_logs) {
-        info!("valid router");
     } else {
-        warn!("invalid router");
+        let accumulator = get_accumulator(
+            accumulator_ssh,
+            port,
+            accumulator_type,
+        );
+        let router_logs = get_router_logs(
+            router_ssh,
+            filename,
+            bytes,
+        );
+        info!("{}/{} packets received", accumulator.total(), router_logs.len());
+        assert!(accumulator.total() <= router_logs.len());
+        if accumulator.validate(&router_logs) {
+            info!("valid router");
+        } else {
+            warn!("invalid router");
+        }
     }
 }
