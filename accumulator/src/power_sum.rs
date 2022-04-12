@@ -491,6 +491,20 @@ mod test {
         assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
     }
 
+    #[tokio::test]
+    async fn test_find_integer_monic_polynomial_roots_multiplicity() {
+        let x = vec![3987231002, 4294966796, 4294966796, 4294966796];
+        let power_sums_diff = calculate_power_sums(&x, x.len()).await;
+        let coeffs = compute_polynomial_coefficients(power_sums_diff);
+        let mut roots = {
+            let roots = find_integer_monic_polynomial_roots(coeffs);
+            assert!(roots.is_ok());
+            roots.unwrap()
+        };
+        roots.sort();
+        assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
+    }
+
     #[test]
     fn test_find_integer_monic_polynomial_roots_no_solution() {
         let coeffs = vec![1, 47920287469, 12243762544, 39307197049];
