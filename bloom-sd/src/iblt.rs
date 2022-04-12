@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::hash::Hasher;
+use std::num::Wrapping;
 
 use rand;
 use rand::Rng;
@@ -133,15 +134,11 @@ impl InvBloomLookupTable {
             }
             if cur < self.counters.max_value() {
                 self.counters.set(idx, cur + 1);
-                let difference = u32::max_value() - self.data[idx];
-                if difference > item_u32 {
-                    self.data[idx] += item_u32;
-                } else {
-                    self.data[idx] = item_u32 - difference;
-                }
             } else {
-                panic!("counting bloom filter counter overflow");
+                // TODO: write a test for wraparound
+                self.counters.set(idx, 0);
             }
+            self.data[idx] = (Wrapping(self.data[idx]) + Wrapping(item_u32)).0;
         }
         min > 0
     }
@@ -160,14 +157,12 @@ impl InvBloomLookupTable {
             let idx = (h % self.num_entries) as usize;
             let cur = self.counters.get(idx);
             if cur == 0 {
-                panic!("item is not in the iblt");
-            }
-            self.counters.set(idx, cur - 1);
-            if self.data[idx] >= item_u32 {
-                self.data[idx] -= item_u32;
+                // wraparound
+                self.counters.set(idx, self.counters.max_value());
             } else {
-                self.data[idx] = u32::max_value() - (item_u32 - self.data[idx]);
+                self.counters.set(idx, cur - 1);
             }
+            self.data[idx] = (Wrapping(self.data[idx]) - Wrapping(item_u32)).0;
         }
     }
 
@@ -322,10 +317,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn counter_overflow() {
+        // test should not panic because we handle counter overflows now
         let mut iblt = InvBloomLookupTable::with_rate(1, 0.01, 10);
         iblt.insert(&1234_u32.to_biguint().unwrap());
         iblt.insert(&1234_u32.to_biguint().unwrap());
+        // TODO: assert something about the values
     }
 }

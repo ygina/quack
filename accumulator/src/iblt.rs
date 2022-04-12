@@ -2,6 +2,7 @@
 use std::time::Instant;
 #[cfg(not(feature = "disable_validation"))]
 use std::collections::HashSet;
+use std::num::Wrapping;
 
 use bincode;
 use num_bigint::BigUint;
@@ -135,29 +136,36 @@ impl Accumulator for IBLTAccumulator {
         for elem in elems {
             iblt.insert(elem);
         }
+        let mut iblt_sum = 0;
         for i in 0..(iblt.num_entries() as usize) {
             let processed_count = iblt.counters().get(i);
             let received_count = self.iblt.counters().get(i);
-            // TODO: handle counter overflows i.e. if the Bloom filter
+            // Handle counter overflows i.e. if the Bloom filter
             // stores the count modulo some number instead of the exact count
-            if processed_count < received_count {
-                return false;
-            }
-            let difference_count = processed_count - received_count;
+            // TODO: write a test for wraparound
+            let difference_count =
+                (Wrapping(processed_count) - Wrapping(received_count)).0
+                & 0xffff;
             iblt.counters_mut().set(i, difference_count);
+            iblt_sum += difference_count;
 
             // Additionally set the data value
-            let processed_data = &iblt.data()[i];
-            let received_data = &self.iblt.data()[i];
-            let difference_data = if processed_data >= received_data {
-                processed_data - received_data
-            } else {
-                (u32::MAX - received_data) + processed_data
-            };
+            let processed_data = iblt.data()[i];
+            let received_data = self.iblt.data()[i];
+            let difference_data =
+                (Wrapping(processed_data) - Wrapping(received_data)).0;
             if difference_count == 0 && !difference_data.is_zero() {
                 return false;
             }
             iblt.data_mut()[i] = difference_data;
+        }
+        // Sanity check the difference IBLT due to wraparound.
+        let var = n_dropped != (iblt_sum / iblt.num_hashes()) as usize;
+        if n_dropped <= (0xffff / iblt.num_hashes()) as _ && var {
+            return false;
+        } else if var {
+            panic!("wrapped around even in the difference iblt, \
+                select a bigger threshold. {} != {}", n_dropped, iblt_sum);
         }
         let t2 = Instant::now();
         info!("calculated the difference iblt: {:?}", t2 - t1);
