@@ -3,6 +3,7 @@
 members = [
     "accumulator",
     "benchmark",
+    "benchmark-overhead",
     "bloom-sd",
     "digest",
     "router",
