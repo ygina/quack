@@ -86,6 +86,7 @@ fn get_router_logs(
     ssh: Option<Vec<&str>>,
     filename: &str,
     nbytes: usize,
+    drop: Option<usize>
 ) -> Vec<BigUint> {
     let data: Vec<u8> = if let Some(ssh) = ssh {
         let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
@@ -145,6 +146,18 @@ fn get_router_logs(
         }
     }
     debug!("parsed {} packets", res.len());
+    if let Some(drop) = drop {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        for _ in 0..drop {
+            if res.is_empty() {
+                break;
+            }
+            let i = rng.gen_range(0..res.len());
+            res.remove(i);
+            debug!("removed index {}", i);
+        }
+    }
     res
 }
 
@@ -228,18 +241,19 @@ fn compare_maps(m1: HashMap<BigUint, Vec<usize>>, m2: HashMap<BigUint, Vec<usize
 fn check_acc_logs(
     router_ssh: Option<Vec<&str>>,
     acc_ssh: Option<Vec<&str>>,
+    drop: Option<usize>,
     router_filename: &str,
     acc_filename: &str,
     bytes: usize,
 ) {
     info!("router logs:");
-    let router_logs = get_router_logs(router_ssh, router_filename, bytes);
+    let router_logs = get_router_logs(router_ssh, router_filename, bytes, drop);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
         println!("0x{:X}", router_logs[i]);
     }
     info!("accumulator logs:");
-    let accumulator_logs = get_router_logs(acc_ssh, acc_filename, bytes);
+    let accumulator_logs = get_router_logs(acc_ssh, acc_filename, bytes, None);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
         println!("0x{:X}", accumulator_logs[i]);
@@ -275,6 +289,13 @@ fn main() {
             .long("bytes")
             .takes_value(true)
             .default_value("16"))
+        .arg(Arg::new("drop")
+            .help("Purposefully drop this number of packets to mimic \
+                malicious packets that were not logged, hoping they were \
+                not actually dropped.")
+            .short('d')
+            .long("drop")
+            .takes_value(true))
         .arg(Arg::new("router-ssh")
             .help("Address of the router to SSH into (if not local) i.e. \
                 `openwrt.lan:22`, the username, and the path to the private \
@@ -312,11 +333,14 @@ fn main() {
     let accumulator_ssh = matches.values_of("accumulator-ssh").map(|ssh|
        ssh.collect());
     let router_ssh = matches.values_of("router-ssh").map(|ssh| ssh.collect());
+    let drop: Option<usize> = matches.value_of("drop").map(|num|
+        num.parse().unwrap());
 
     if let Some(acc_filename) = matches.value_of("check-acc-logs") {
         check_acc_logs(
             router_ssh.clone(),
             accumulator_ssh.clone(),
+            drop,
             filename,
             acc_filename,
             bytes,
@@ -334,6 +358,7 @@ fn main() {
             router_ssh,
             filename,
             bytes,
+            drop,
         );
         let t3 = Instant::now();
         info!("get_router_logs: {:?}", t3 - t2);
