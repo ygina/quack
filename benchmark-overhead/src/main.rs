@@ -33,7 +33,7 @@ fn gen_accumulator(ty: &str, threshold: usize) -> Box<dyn Accumulator> {
         "mock" => Box::new(MockAccumulator {}),
         "naive" => Box::new(NaiveAccumulator::new()),
         "iblt" => Box::new(IBLTAccumulator::new(threshold)),
-        "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
+        "psum" => Box::new(PowerSumAccumulator::new(threshold)),
         _ => unreachable!(),
     }
 }
@@ -52,6 +52,11 @@ fn main() {
             .long("bytes")
             .takes_value(true)
             .default_value("24"))
+        .arg(Arg::new("trials")
+            .help("Number of trials per accumulator.")
+            .long("trials")
+            .takes_value(true)
+            .default_value("11"))
         .arg(Arg::new("threshold")
             .help("Threshold number of dropped packets for the IBLT and power \
                 sum accumulators.")
@@ -68,16 +73,17 @@ fn main() {
             .possible_value("mock")
             .possible_value("naive")
             .possible_value("iblt")
-            .possible_value("power_sum"))
+            .possible_value("psum"))
         .get_matches();
 
     let n: usize = matches.value_of("n").unwrap().parse().unwrap();
     let b: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let t: usize = matches.value_of("threshold").unwrap().parse().unwrap();
+    let trials: usize = matches.value_of("trials").unwrap().parse().unwrap();
     let tys = if let Some(ty) = matches.value_of("accumulator") {
         vec![ty]
     } else {
-        vec!["mock", "naive", "iblt", "power_sum"]
+        vec!["mock", "naive", "iblt", "psum"]
     };
     let mut accs: Vec<_> =
         tys.iter().map(|ty| gen_accumulator(ty, t)).collect();
@@ -90,15 +96,20 @@ fn main() {
         .collect();
     info!("per {} packets", BATCH_UNIT);
     for i in 0..tys.len() {
-        let now = Instant::now();
-        for elem in &elems {
-            accs[i].process(elem);
+        let mut totals = vec![];
+        for _ in 0..trials {
+            let now = Instant::now();
+            for elem in &elems {
+                accs[i].process(elem);
+            }
+            let total = Instant::now() - now;
+            totals.push(BATCH_UNIT * total / (n as u32))
         }
-        let total = Instant::now() - now;
+        totals.sort();
         info!(
             "{}\t{:?}",
             tys[i],
-            BATCH_UNIT * total / (n as u32),
+            totals[totals.len() / 2],
         );
     }
 }
