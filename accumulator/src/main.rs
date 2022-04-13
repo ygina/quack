@@ -98,6 +98,11 @@ async fn pcap_listen(
                             warn!("TOO SMALL");
                             continue;
                         }
+                        let hi = std::cmp::min(14 + bytes, block.data.len());
+                        let mut elem = block.data[14..hi].to_vec();
+                        if elem.len() < bytes {
+                            elem.append(&mut vec![0; bytes - elem.len()]);
+                        }
                         let hi = std::cmp::min(block.data.len(), 14 + bytes as usize);
                         let elem = &block.data[14..hi];
                         // NOTE: many of these elements are not unique

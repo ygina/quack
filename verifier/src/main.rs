@@ -120,7 +120,12 @@ fn get_router_logs(
                 maybe_truncated = false;
                 match block {
                     PcapBlockOwned::Legacy(block) => {
-                        res.push(block.data[14..(14 + nbytes)].to_vec());
+                        let hi = std::cmp::min(14 + nbytes, block.data.len());
+                        let mut elem = block.data[14..hi].to_vec();
+                        if elem.len() < nbytes {
+                            elem.append(&mut vec![0; nbytes - elem.len()]);
+                        }
+                        res.push(elem);
                     },
                     PcapBlockOwned::NG(block) => {
                         debug!("ignoring NG({:?}) offset={}", block, offset);
