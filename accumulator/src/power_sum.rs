@@ -1,12 +1,10 @@
 #[cfg(not(feature = "disable_validation"))]
 use std::collections::{HashSet, HashMap};
-use std::hash::Hasher;
 #[cfg(not(feature = "disable_validation"))]
 use std::time::Instant;
 
 use bincode;
 use serde::{Serialize, Deserialize};
-use djb_hash::{HasherU32, x33a_u32::*};
 use num_bigint::BigUint;
 #[cfg(not(feature = "disable_validation"))]
 use tokio::task;
@@ -52,12 +50,6 @@ extern "C" {
         field: i64,
         degree: usize,
     ) -> i32;
-}
-
-fn elem_to_u32(elem: &BigUint) -> u32 {
-    let mut hasher = X33aU32::new();
-    hasher.write(&elem.to_bytes_be());
-    hasher.finish_u32()
 }
 
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
@@ -257,7 +249,8 @@ impl Accumulator for PowerSumAccumulator {
         self.num_elems += 1;
         let mut value: i64 = 1;
         for i in 0..self.power_sums.len() {
-            value = mul_and_mod(value, elem_to_u32(elem) as _, LARGE_PRIME);
+            value = mul_and_mod(value, bloom_sd::elem_to_u32(elem) as _,
+               LARGE_PRIME);
             self.power_sums[i] = (self.power_sums[i] + value) % LARGE_PRIME;
         }
     }
@@ -310,7 +303,7 @@ impl Accumulator for PowerSumAccumulator {
         let t1 = Instant::now();
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();
         let elems_u32: Vec<u32> =
-            elems.iter().map(|elem| elem_to_u32(elem)).collect();
+            elems.iter().map(|elem| bloom_sd::elem_to_u32(elem)).collect();
         let power_sums = rt.block_on(async {
             calculate_power_sums(&elems_u32, n_values).await
         });
@@ -359,7 +352,7 @@ impl Accumulator for PowerSumAccumulator {
         let mut digest = Digest::new();
         let mut collisions: HashMap<u32, Vec<BigUint>> = HashMap::new();
         for elem in elems {
-            let elem_u32 = elem_to_u32(elem);
+            let elem_u32 = bloom_sd::elem_to_u32(elem);
             if !dropped_counts.contains_key(&elem_u32) {
                 // If an element in the log doesn't hash to a u32 root,
                 // it wasn't dropped, so add it to the digest.

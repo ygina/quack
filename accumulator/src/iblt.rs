@@ -1,7 +1,7 @@
 #[cfg(not(feature = "disable_validation"))]
 use std::time::Instant;
 #[cfg(not(feature = "disable_validation"))]
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::num::Wrapping;
 
 use bincode;
@@ -12,6 +12,8 @@ use serde::{Serialize, Deserialize};
 use bloom_sd::InvBloomLookupTable;
 use crate::Accumulator;
 use digest::Digest;
+#[cfg(not(feature = "disable_validation"))]
+use itertools::Itertools;
 
 #[cfg(not(feature = "disable_validation"))]
 #[link(name = "glpk", kind = "dylib")]
@@ -43,7 +45,6 @@ pub struct IBLTAccumulator {
 }
 
 // TODO: IBLT parameters
-// TODO: may also want to map IBLT entries to u32 with DJB hash
 const BITS_PER_ENTRY: usize = 16;
 const FALSE_POSITIVE_RATE: f32 = 0.0001;
 
@@ -174,7 +175,7 @@ impl Accumulator for IBLTAccumulator {
         // in the IBLT that are set to 1. Then find the remaining list of
         // candidate dropped elements by based on any whose indexes are still
         // not 0. If elements are not unique, the ILP can find _a_ solution.
-        let mut removed = iblt.eliminate_elems();
+        let removed = iblt.eliminate_elems();
         let t3 = Instant::now();
         info!("eliminated {}/{} elements using the iblt: {:?}",
             removed.len(), n_dropped, t3 - t2);
@@ -187,13 +188,57 @@ impl Accumulator for IBLTAccumulator {
         // sanity check that the digest matches.
         if removed.len() == n_dropped {
             let mut digest = Digest::new();
+            // Resolve DJB hash collisions in removed
+            let mut removed_map = removed.into_iter()
+                .map(|elem_u32| (elem_u32, vec![]))
+                .collect::<HashMap<u32, Vec<&BigUint>>>();
             for elem in elems {
-                if !removed.remove(&bloom_sd::elem_to_u32(&elem)) {
+                let elem_u32 = bloom_sd::elem_to_u32(&elem);
+                if let Some(removed_map_vec) = removed_map.get_mut(&elem_u32) {
+                    removed_map_vec.push(elem);
+                } else {
                     digest.add(elem);
                 }
             }
-            assert!(digest.equals(&self.digest));
-            return true;
+            let mut combinations = vec![];
+            let mut single_dropped = 0;
+            for (_, maybe_elems) in removed_map.into_iter() {
+                assert!(!maybe_elems.is_empty());
+                let len = maybe_elems.len();
+                if len == 0 {
+                    warn!("removed iblt element has no preimage");
+                    return false;
+                } else if len == 1 {
+                    // single dropped candidate
+                    single_dropped += 1;
+                    continue;
+                }
+                debug!("finding combinations for {} elems", maybe_elems.len());
+                combinations.push(maybe_elems.into_iter().combinations(len - 1));
+            }
+            debug!("{} single dropped candidates", single_dropped);
+            let mut n_digests = 0;
+            for curr in combinations.into_iter().multi_cartesian_product() {
+                let mut digest = digest.clone();
+                for elem in curr.into_iter().flat_map(|val| val) {
+                    digest.add(&elem);
+                }
+                n_digests += 1;
+                assert_eq!(digest.count as usize, self.total());
+                if digest.equals(&self.digest) {
+                    debug!("found matching digest after checking {} digests, all iblt elements removed", n_digests);
+                    return true;
+                }
+            }
+            if n_digests != 0 {
+                assert_ne!(digest.count as usize, self.total());
+                return false;
+            } else {
+                debug!("will it pass?");
+                assert_eq!(digest.count as usize, self.total());
+                assert_eq!(digest.count, self.digest.count);
+                return digest.equals(&self.digest);
+            }
         }
 
         // Then there are still some remaining candidate dropped elements,
@@ -254,15 +299,47 @@ impl Accumulator for IBLTAccumulator {
                 .map(|dropped_i| elems_i[dropped_i])
                 .collect::<HashSet<_>>();
             let mut digest = Digest::new();
+            let mut removed_map = removed.into_iter()
+                .map(|elem_u32| (elem_u32, vec![]))
+                .collect::<HashMap<u32, Vec<&BigUint>>>();
             for i in 0..elems.len() {
                 if dropped_is.contains(&i) {
                     continue;
                 }
                 let elem_u32 = bloom_sd::elem_to_u32(&elems[i]);
-                if removed.remove(&elem_u32) {
+                if let Some(removed_map_vec) = removed_map.get_mut(&elem_u32) {
+                    removed_map_vec.push(&elems[i]);
+                } else {
+                    digest.add(&elems[i]);
+                }
+            }
+            let mut combinations = vec![];
+            for (_, maybe_elems) in removed_map.into_iter() {
+                assert!(!maybe_elems.is_empty());
+                let len = maybe_elems.len();
+                if len == 0 {
+                    warn!("removed iblt element has no preimage");
+                    return false;
+                } else if len == 1 {
+                    // single dropped candidate
                     continue;
                 }
-                digest.add(&elems[i]);
+                debug!("finding combinations for {} elems", maybe_elems.len());
+                combinations.push(maybe_elems.into_iter().combinations(len - 1));
+            }
+            let mut n_digests = 0;
+            for curr in combinations.into_iter().multi_cartesian_product() {
+                let mut digest = digest.clone();
+                for elem in curr.into_iter().flat_map(|val| val) {
+                    digest.add(&elem);
+                }
+                n_digests += 1;
+                assert_eq!(digest.count as usize, self.total());
+                if digest.equals(&self.digest) {
+                    debug!("found matching digest after checking {} digests",
+                       n_digests);
+                    return true;
+                }
             }
             digest.equals(&self.digest)
         } else {

@@ -13,7 +13,7 @@ use crate::BigUintDef;
 pub struct AdditiveMsetHash {
     #[serde(with = "BigUintDef")]
     hash: BigUint,
-    count: u32,
+    pub count: u32,
     #[serde(with = "BigUintDef")]
     nonce: BigUint,
 }
