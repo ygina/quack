@@ -3,52 +3,62 @@
 //! Reference: https://people.csail.mit.edu/devadas/pubs/mhashes.pdf
 use rand;
 use rand::Rng;
-use num_bigint::{BigUint, ToBigUint};
+use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
 use sha3::{Digest, Sha3_256};
-use crate::BigUintDef;
+
+pub const NBYTES_HASH: usize = 32;
+pub const NBYTES_NONCE: usize = 16;
+type AmhHash = [u8; NBYTES_HASH];
+type AmhNonce = [u8; NBYTES_NONCE];
 
 /// Incremental additive multiset hash.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdditiveMsetHash {
-    #[serde(with = "BigUintDef")]
-    hash: BigUint,
+    hash: AmhHash,
     pub count: u32,
-    #[serde(with = "BigUintDef")]
-    nonce: BigUint,
+    nonce: AmhNonce,
 }
 
-fn hash_fn(bit: &[u8; 1], val: &[u8]) -> BigUint {
+fn hash_fn(bit: u8, val: &[u8]) -> AmhHash {
+    let mut hash: AmhHash = Default::default();
     let mut hasher = Sha3_256::new();
-    hasher.update(bit);
+    hasher.update([bit]);
     hasher.update(val);
-    let bytes = &hasher.finalize()[..];
-    BigUint::from_bytes_be(bytes)
-}
-
-lazy_static! {
-    static ref ONE: BigUint = 1_u32.to_biguint().unwrap();
-    static ref MOD: BigUint = 2_u64.to_biguint().unwrap().pow(256);
+    let bytes = hasher.finalize();
+    assert!(bytes.len() <= NBYTES_HASH);
+    hash.copy_from_slice(&bytes[..]);
+    hash
 }
 
 /// add two hashes then modulo 2^256
-fn add_hashes(a: &BigUint, b: &BigUint) -> BigUint {
-    (a + b).modpow(&ONE, &MOD)
+fn add_hashes(a: &AmhHash, b: &AmhHash) -> AmhHash {
+    let a = BigUint::from_bytes_le(a);
+    let b = BigUint::from_bytes_le(b);
+    let c = (a + b).to_bytes_le();
+    let mut hash: AmhHash = Default::default();
+    let len = std::cmp::min(NBYTES_HASH, c.len());
+    hash[..len].copy_from_slice(&c[..len]);
+    hash
 }
 
 impl AdditiveMsetHash {
-    pub fn new() -> Self {
-        let nonce: [u8; 16] = rand::thread_rng().gen();
+    pub fn new_with_seed(nonce: AmhNonce) -> Self {
         Self {
-            hash: hash_fn(b"0", &nonce[..]),
+            hash: hash_fn(0, &nonce),
             count: 0,
-            nonce: BigUint::from_bytes_be(&nonce),
+            nonce,
         }
+    }
+
+    pub fn new() -> Self {
+        let nonce: AmhNonce = rand::thread_rng().gen();
+        Self::new_with_seed(nonce)
     }
 
     /// Adds an element to the digest.
     pub fn add(&mut self, elem: &BigUint) {
-        let hash = hash_fn(b"1", &elem.to_bytes_be());
+        let hash = hash_fn(1, &elem.to_bytes_be());
         self.hash = add_hashes(&self.hash, &hash);
         // assume no overflow
         self.count += 1;
@@ -57,40 +67,48 @@ impl AdditiveMsetHash {
     /// Adds multiple elements to the digest.
     pub fn add_all(&mut self, elems: &Vec<BigUint>) {
         for elem in elems {
-            let hash = hash_fn(b"1", &elem.to_bytes_be());
+            let hash = hash_fn(1, &elem.to_bytes_be());
             self.hash = add_hashes(&self.hash, &hash);
         }
         self.count += elems.len() as u32;
     }
 
     /// Returns the digest hash.
-    pub fn value(&self) -> &BigUint {
+    pub fn value(&self) -> &AmhHash {
         &self.hash
     }
 
     /// Checks if two additive multiset hashes are equal.
     pub fn equals(&self, other: &Self) -> bool {
         if self.count != other.count {
+            // println!("count does not match {} != {}", self.count, other.count);
             return false;
         }
         // switched hash_fn sides from the equality check in the paper
         // to ensure the LHS and RHS are positive.
-        let lhs = add_hashes(&self.hash, &hash_fn(b"0",
-            &other.nonce.to_bytes_be()[..]));
-        let rhs = add_hashes(&other.hash, &hash_fn(b"0",
-            &self.nonce.to_bytes_be()[..]));
+        let lhs = add_hashes(&self.hash, &hash_fn(0, &other.nonce));
+        let rhs = add_hashes(&other.hash, &hash_fn(0, &self.nonce));
         lhs == rhs
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::ToBigUint;
     use rand::seq::SliceRandom;
     use super::*;
 
     fn gen_elements(n: usize) -> Vec<BigUint> {
         let mut rng = rand::thread_rng();
         (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+    }
+
+    #[test]
+    fn default_digests_are_equal() {
+        let digest_a = AdditiveMsetHash::new();
+        let digest_b = AdditiveMsetHash::new();
+        assert!(digest_a.equals(&digest_b));
+        assert!(digest_b.equals(&digest_a));
     }
 
     #[test]
@@ -131,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn element_order_does_not_matter() {
+    fn element_order_does_not_matter_random() {
         let set_a = gen_elements(10); //random 10 values
         let set_b = {
             let mut set = set_a.clone(); //randomly shuffle a
@@ -145,5 +163,15 @@ mod tests {
         digest_a.add_all(&set_a);
         digest_b.add_all(&set_b);
         assert!(digest_a.equals(&digest_b));
+    }
+
+    #[test]
+    fn deterministic_hash_fn() {
+        assert_eq!(
+            hash_fn(0, b"151314873930905896330907615404940191038"),
+            hash_fn(0, b"151314873930905896330907615404940191038"));
+        assert_eq!(
+            hash_fn(1, b"151314873930905896330907615404940191038"),
+            hash_fn(1, b"151314873930905896330907615404940191038"));
     }
 }
