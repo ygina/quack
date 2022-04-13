@@ -325,7 +325,8 @@ mod tests {
         // test should not panic because we handle counter overflows now
         let mut iblt = InvBloomLookupTable::with_rate(1, 0.01, 10);
         iblt.insert(&1234_u32.to_biguint().unwrap());
+        assert_ne!(vvsum(iblt.counters()), 0);
         iblt.insert(&1234_u32.to_biguint().unwrap());
-        // TODO: assert something about the values
+        assert_eq!(vvsum(iblt.counters()), 0);
     }
 }

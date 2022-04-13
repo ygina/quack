@@ -29,6 +29,11 @@ extern "C" {
     ) -> i32;
 }
 
+// TODO: IBLT parameters
+const BITS_PER_ENTRY: usize = 8;
+const WRAPAROUND_MASK: u32 = (1 << BITS_PER_ENTRY) - 1;
+const FALSE_POSITIVE_RATE: f32 = 0.0001;
+
 /// The counting bloom filter (IBLT) accumulator stores a IBLT of all processed
 /// packets in addition to the digest.
 ///
@@ -44,9 +49,192 @@ pub struct IBLTAccumulator {
     iblt: InvBloomLookupTable,
 }
 
-// TODO: IBLT parameters
-const BITS_PER_ENTRY: usize = 8;
-const FALSE_POSITIVE_RATE: f32 = 0.0001;
+/// Calculate an IBLT from the logged elements, and subtract the IBLT of the
+/// received elements from this newly-constructed IBLT.
+/// - `n_dropped`: expected number of dropped elements
+/// - `logged_elems`: the list of logged elements
+/// - `received_iblt`: the IBLT of the receiving accumulator
+fn calculate_difference_iblt(
+    n_dropped: usize,
+    logged_elems: &Vec<BigUint>,
+    received_iblt: &InvBloomLookupTable,
+) -> Option<InvBloomLookupTable> {
+    let mut iblt = received_iblt.empty_clone();
+    for elem in logged_elems {
+        iblt.insert(elem);
+    }
+    let mut iblt_sum = 0;
+    for i in 0..(iblt.num_entries() as usize) {
+        let logged_count = iblt.counters().get(i);
+        let received_count = received_iblt.counters().get(i);
+        // Handle counter overflows i.e. if the Bloom filter
+        // stores the count modulo some number instead of the exact count.
+        // This number is derived from the bits per entry.
+        let difference_count =
+            (Wrapping(logged_count) - Wrapping(received_count)).0
+            & WRAPAROUND_MASK;
+        iblt.counters_mut().set(i, difference_count);
+        iblt_sum += difference_count;
+
+        // Additionally set the data value
+        let logged_data = iblt.data()[i];
+        let received_data = received_iblt.data()[i];
+        let difference_data =
+            (Wrapping(logged_data) - Wrapping(received_data)).0;
+        if difference_count == 0 && !difference_data.is_zero() {
+            return None;
+        }
+        iblt.data_mut()[i] = difference_data;
+    }
+
+    // If the number of dropped packets multiplied by the number of hashes is
+    // equal to the sum of all entries in the IBLT, proceed with the ILP check.
+    if (n_dropped as u32) * iblt.num_hashes() == iblt_sum {
+        return Some(iblt);
+    }
+
+    // Otherwise there was wraparound, which either occurs if a counter has a
+    // a real negative entry (meaning there was a malicious packet), or if the
+    // difference is some larger number modulo the max value of an IBLT entry.
+    // We can say that if the number of dropped packets does not exceed this
+    // max value, then wraparound definitely should not have occurred.
+    // Otherwise, we simply do not handle wraparound, as the user should choose
+    // a threshold that allows the number of dropped packets in a cell to rarely
+    // exceed the threshold (unless dropped packets have high multiplicity?).
+    if (n_dropped as u32) <= WRAPAROUND_MASK {
+        debug!("malicious wraparound detected");
+    } else {
+        warn!("not handling potentially benign wraparound, may need to select
+            a bigger threshold");
+    }
+    None
+}
+
+/// Checks whether there is a subset of elements with the DJB hashes of the
+/// dropped elements that produce the same digest.
+/// - `elems`: the list of logged elements
+/// - `removed_u32`: the set of DJB hashes of removed elements from the IBLT.
+///    Elements are necessarily unique or they would have hashed to the same
+///    slot in the IBLT.
+fn check_digest_from_removed_set(
+    expected_digest: &Digest,
+    elems: Vec<&BigUint>,
+    removed: HashSet<u32>,
+) -> bool {
+    // Create a map from DJB hash to elements that hash to that value. If the
+    // DJB hash is not in the removed set, then the packet was not dropped, so
+    // add it to the digest. Otherwise, it might have been dropped.
+    let mut digest = Digest::new();
+    let mut collisions_map: HashMap<u32, Vec<&BigUint>> = HashMap::new();
+    for elem in elems {
+        let elem_u32 = bloom_sd::elem_to_u32(&elem);
+        if removed.contains(&elem_u32) {
+            collisions_map.entry(elem_u32).or_insert(vec![]).push(elem);
+        } else {
+            digest.add(elem);
+        }
+    }
+
+    // If not every element in the removed set has a preimage, we are missing
+    // an element from the log.
+    if removed.len() != collisions_map.len() {
+        return false;
+    }
+
+    // Remove any entries from the collisions map with only one preimage value.
+    // Those packets were necessarily dropped since there is no other mapping.
+    // Map remaining entries to possible combinations with one element removed.
+    let combinations = collisions_map.into_iter()
+        .filter(|(_, collisions)| collisions.len() != 1)
+        .map(|(_, collisions)| (collisions.len() - 1, collisions))
+        .map(|(n, collisions)| collisions.into_iter().combinations(n))
+        .collect::<Vec<_>>();
+    if combinations.len() == 0 {
+        debug!("no collisions, checking digest");
+        assert_eq!(digest.count, expected_digest.count);
+        return digest.equals(&expected_digest);
+    }
+    debug!("handling collisions for {} removed elems", combinations.len());
+
+    // Try every combination of remaining elements with one removed per slot,
+    // and if any of them produce a matching digest, accept.
+    for (n_digests, combination) in
+            combinations.into_iter().multi_cartesian_product().enumerate() {
+        let mut digest = digest.clone();
+        for elem in combination.into_iter().flat_map(|val| val) {
+            digest.add(&elem);
+        }
+        assert_eq!(digest.count, expected_digest.count);
+        if digest.equals(&expected_digest) {
+            debug!("found matching digest after checking {} digests", n_digests);
+            return true;
+        }
+    }
+    false
+}
+
+/// Returns the indexes of the dropped elements in `elems` that satisfy the
+/// counters in the IBLT. Does not check the data fields in the IBLT, which may
+/// not be accurate if there is more than one solution these constraints.
+/// - `n_dropped`: expected number of dropped elements less the number of
+///    elements already removed from the IBLT
+/// - `elems`: the list of logged elements
+/// - `iblt`: the difference IBLT
+fn solve_ilp_for_iblt(
+    n_dropped_remaining: usize,
+    elems: &Vec<BigUint>,
+    iblt: InvBloomLookupTable,
+) -> Option<HashSet<usize>> {
+    // Number of equations = # of remaining candidate elements in `elems_i`.
+    // Number of variables = number of cells in the IBLT.
+    let mut elems_i: Vec<usize> = vec![];
+    let pkt_hashes: Vec<u32> = elems
+        .iter()
+        .enumerate()
+        .filter(|(_, elem)| iblt.contains(&elem))
+        .flat_map(|(i, elem)| {
+            elems_i.push(i);
+            iblt.indexes(&elem)
+        })
+        .map(|hash| hash as u32)
+        .collect();
+    let counters: Vec<usize> = (0..(iblt.num_entries() as usize))
+        .map(|i| iblt.counters().get(i))
+        .map(|count| count.try_into().unwrap())
+        .collect();
+    assert!(n_dropped_remaining <= elems_i.len());
+    info!("setup system of {} eqs in {} vars (expect sols to sum to {})",
+        elems_i.len(),
+        counters.len(),
+        n_dropped_remaining);
+
+    // Solve the ILP with GLPK. The result is the indices of the dropped
+    // packets in the `elems_i` vector. The number of solutions
+    // does not depend entirely on the number of equations and variables.
+    // Instead, if there are fewer (linearly independent) equations than
+    // the sum of the counters divided by the number of hashes, then there
+    // is no solution. If there are more, there may be multiple solutions.
+    let mut dropped: Vec<usize> = vec![0; n_dropped_remaining];
+    let err = unsafe {
+        solve_ilp_glpk(
+            counters.len(),
+            counters.as_ptr(),
+            iblt.num_hashes() as usize,
+            elems_i.len(),
+            pkt_hashes.as_ptr(),
+            n_dropped_remaining,
+            dropped.as_mut_ptr(),
+        )
+    };
+    if err != 0 {
+        warn!("ILP solving error: {}", err);
+        return None;
+    }
+    Some(dropped
+        .into_iter()
+        .map(|dropped_i| elems_i[dropped_i])
+        .collect::<HashSet<_>>())
+}
 
 impl IBLTAccumulator {
     pub fn new(threshold: usize) -> Self {
@@ -133,41 +321,14 @@ impl Accumulator for IBLTAccumulator {
             return digest.equals(&self.digest);
         }
 
-        let mut iblt = self.iblt.empty_clone();
-        for elem in elems {
-            iblt.insert(elem);
-        }
-        let mut iblt_sum = 0;
-        for i in 0..(iblt.num_entries() as usize) {
-            let processed_count = iblt.counters().get(i);
-            let received_count = self.iblt.counters().get(i);
-            // Handle counter overflows i.e. if the Bloom filter
-            // stores the count modulo some number instead of the exact count
-            // TODO: might not be 0xffff if num bits per entry changes
-            let difference_count =
-                (Wrapping(processed_count) - Wrapping(received_count)).0
-                & 0xff;
-            iblt.counters_mut().set(i, difference_count);
-            iblt_sum += difference_count;
-
-            // Additionally set the data value
-            let processed_data = iblt.data()[i];
-            let received_data = self.iblt.data()[i];
-            let difference_data =
-                (Wrapping(processed_data) - Wrapping(received_data)).0;
-            if difference_count == 0 && !difference_data.is_zero() {
+        let mut iblt = {
+            let iblt = calculate_difference_iblt(n_dropped, elems, &self.iblt);
+            if let Some(iblt) = iblt {
+                iblt
+            } else {
                 return false;
             }
-            iblt.data_mut()[i] = difference_data;
-        }
-        // Sanity check the difference IBLT due to wraparound.
-        let var = n_dropped != (iblt_sum / iblt.num_hashes()) as usize;
-        if n_dropped <= (0xff / iblt.num_hashes()) as _ && var {
-            return false;
-        } else if var {
-            panic!("wrapped around even in the difference iblt, \
-                select a bigger threshold. {} != {}", n_dropped, iblt_sum);
-        }
+        };
         let t2 = Instant::now();
         info!("calculated the difference iblt: {:?}", t2 - t1);
 
@@ -185,167 +346,45 @@ impl Accumulator for IBLTAccumulator {
         // elements is at most the size of the original set, if we removed the
         // number of dropped elements, then the IBLT necessarily only has zero
         // entries. This means solving an ILP is unnecessary but we still
-        // sanity check that the digest matches.
+        // check that the digest matches in case the router constructed a
+        // preimage collision.
         if removed.len() == n_dropped {
-            let mut digest = Digest::new();
-            // Resolve DJB hash collisions in removed
-            let mut removed_map = removed.into_iter()
-                .map(|elem_u32| (elem_u32, vec![]))
-                .collect::<HashMap<u32, Vec<&BigUint>>>();
-            for elem in elems {
-                let elem_u32 = bloom_sd::elem_to_u32(&elem);
-                if let Some(removed_map_vec) = removed_map.get_mut(&elem_u32) {
-                    removed_map_vec.push(elem);
-                } else {
-                    digest.add(elem);
-                }
-            }
-            let mut combinations = vec![];
-            let mut single_dropped = 0;
-            for (_, maybe_elems) in removed_map.into_iter() {
-                assert!(!maybe_elems.is_empty());
-                let len = maybe_elems.len();
-                if len == 0 {
-                    warn!("removed iblt element has no preimage");
-                    return false;
-                } else if len == 1 {
-                    // single dropped candidate
-                    single_dropped += 1;
-                    continue;
-                }
-                debug!("finding combinations for {} elems", maybe_elems.len());
-                combinations.push(maybe_elems.into_iter().combinations(len - 1));
-            }
-            debug!("{} single dropped candidates", single_dropped);
-            let mut n_digests = 0;
-            for curr in combinations.into_iter().multi_cartesian_product() {
-                let mut digest = digest.clone();
-                for elem in curr.into_iter().flat_map(|val| val) {
-                    digest.add(&elem);
-                }
-                n_digests += 1;
-                assert_eq!(digest.count as usize, self.total());
-                if digest.equals(&self.digest) {
-                    debug!("found matching digest after checking {} digests, all iblt elements removed", n_digests);
-                    return true;
-                }
-            }
-            if n_digests != 0 {
-                assert_ne!(digest.count as usize, self.total());
-                return false;
-            } else {
-                debug!("will it pass?");
-                assert_eq!(digest.count as usize, self.total());
-                assert_eq!(digest.count, self.digest.count);
-                return digest.equals(&self.digest);
-            }
+            debug!("all iblt elements removed");
+            return check_digest_from_removed_set(
+                &self.digest,
+                elems.iter().collect(),
+                removed,
+            );
         }
 
         // Then there are still some remaining candidate dropped elements,
-        // and the IBLT is not empty. n equations, the number of remaining
-        // candidate elements, in k variables, the number of cells in the IBLT.
-        let mut elems_i: Vec<usize> = vec![];
-        let pkt_hashes: Vec<u32> = elems
-            .iter()
-            .enumerate()
-            .filter(|(_, elem)| iblt.contains(&elem))
-            .flat_map(|(i, elem)| {
-                elems_i.push(i);
-                iblt.indexes(&elem)
-            })
-            .map(|hash| hash as u32)
-            .collect();
-        let counters: Vec<usize> = (0..(iblt.num_entries() as usize))
-            .map(|i| iblt.counters().get(i))
-            .map(|count| count.try_into().unwrap())
-            .collect();
+        // and the IBLT is not empty. Solve an ILP to determine which elements
+        // could make up the counters in the IBLT.
         assert!(n_dropped > removed.len());
         let n_dropped_remaining = n_dropped - removed.len();
-        assert!(n_dropped_remaining <= elems_i.len());
-        let t4 = Instant::now();
-        info!("setup system of {} eqs in {} vars (expect sols to sum to {}): {:?}",
-            elems_i.len(),
-            counters.len(),
+        let dropped_is = if let Some(dropped_is) = solve_ilp_for_iblt(
             n_dropped_remaining,
-            t4 - t3);
-
-        // Solve the ILP with GLPK. The result is the indices of the dropped
-        // packets in the `maybe_dropped` vector. The number of solutions
-        // does not depend entirely on the number of equations and variables.
-        // Instead, if there are fewer (linearly independent) equations than
-        // the sum of the counters divided by the number of hashes, then there
-        // is no solution. If there are more, there may be multiple solutions.
-        let mut dropped: Vec<usize> = vec![0; n_dropped_remaining];
-        let err = unsafe {
-            solve_ilp_glpk(
-                counters.len(),
-                counters.as_ptr(),
-                iblt.num_hashes() as usize,
-                elems_i.len(),
-                pkt_hashes.as_ptr(),
-                n_dropped_remaining,
-                dropped.as_mut_ptr(),
-            )
-        };
-        let t5 = Instant::now();
-        info!("solved ILP: {:?}", t5 - t4);
-        if err == 0 {
-            // Right now we have:
-            // * `removed` - the djb hash of elems that were definitely dropped
-            // * `dropped` - the indexes of the elems the ILP believes were
-            //    dropped in the `elems_i` vec.
-            let dropped_is = dropped
-                .into_iter()
-                .map(|dropped_i| elems_i[dropped_i])
-                .collect::<HashSet<_>>();
-            let mut digest = Digest::new();
-            let mut removed_map = removed.into_iter()
-                .map(|elem_u32| (elem_u32, vec![]))
-                .collect::<HashMap<u32, Vec<&BigUint>>>();
-            for i in 0..elems.len() {
-                if dropped_is.contains(&i) {
-                    continue;
-                }
-                let elem_u32 = bloom_sd::elem_to_u32(&elems[i]);
-                if let Some(removed_map_vec) = removed_map.get_mut(&elem_u32) {
-                    removed_map_vec.push(&elems[i]);
-                } else {
-                    digest.add(&elems[i]);
-                }
-            }
-            let mut combinations = vec![];
-            for (_, maybe_elems) in removed_map.into_iter() {
-                assert!(!maybe_elems.is_empty());
-                let len = maybe_elems.len();
-                if len == 0 {
-                    warn!("removed iblt element has no preimage");
-                    return false;
-                } else if len == 1 {
-                    // single dropped candidate
-                    continue;
-                }
-                debug!("finding combinations for {} elems", maybe_elems.len());
-                combinations.push(maybe_elems.into_iter().combinations(len - 1));
-            }
-            let mut n_digests = 0;
-            for curr in combinations.into_iter().multi_cartesian_product() {
-                let mut digest = digest.clone();
-                for elem in curr.into_iter().flat_map(|val| val) {
-                    digest.add(&elem);
-                }
-                n_digests += 1;
-                assert_eq!(digest.count as usize, self.total());
-                if digest.equals(&self.digest) {
-                    debug!("found matching digest after checking {} digests",
-                       n_digests);
-                    return true;
-                }
-            }
-            digest.equals(&self.digest)
+            elems,
+            iblt,
+        ) {
+            dropped_is
         } else {
-            warn!("ILP solving error: {}", err);
-            false
-        }
+            return false;
+        };
+        let t4 = Instant::now();
+        info!("solved ILP: {:?}", t4 - t3);
+
+        // Right now we have:
+        // * `removed` - the djb hash of elems that were definitely dropped
+        // * `dropped_is` - the indexes of the elems the ILP believes were
+        //    dropped in the `elems` vec.
+        debug!("checking combinations for removed IBLT elems");
+        let elems = elems.iter()
+            .enumerate()
+            .filter(|(i, _)| !dropped_is.contains(&i))
+            .map(|(_, elem)| elem)
+            .collect::<Vec<_>>();
+        return check_digest_from_removed_set(&self.digest, elems, removed);
     }
 }
 
@@ -387,5 +426,20 @@ mod tests {
         let acc3: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(!acc1.equals(&acc2));
         assert!(acc1.equals(&acc3));
+    }
+
+    #[test]
+    fn test_calculate_difference_iblt() {
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_check_digest_from_removed_set() {
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_solve_ilp_for_iblt() {
+        unimplemented!()
     }
 }
