@@ -87,4 +87,5 @@ fn main() {
     } else {
         error!("validation failed, expected {}", !malicious);
     }
+    info!("digest size = {} bytes", accumulator.to_bytes().len());
 }
