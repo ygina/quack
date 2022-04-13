@@ -2,6 +2,7 @@
 use std::time::Instant;
 #[cfg(not(feature = "disable_validation"))]
 use std::collections::{HashSet, HashMap};
+#[cfg(not(feature = "disable_validation"))]
 use std::num::Wrapping;
 
 use bincode;
@@ -31,6 +32,7 @@ extern "C" {
 
 // TODO: IBLT parameters
 const BITS_PER_ENTRY: usize = 8;
+#[cfg(not(feature = "disable_validation"))]
 const WRAPAROUND_MASK: u32 = (1 << BITS_PER_ENTRY) - 1;
 const FALSE_POSITIVE_RATE: f32 = 0.0001;
 
@@ -53,6 +55,7 @@ pub struct IBLTAccumulator {
 /// - `n_dropped`: expected number of dropped elements
 /// - `logged_elems`: the list of logged elements
 /// - `received_iblt`: the IBLT of the receiving accumulator
+#[cfg(not(feature = "disable_validation"))]
 fn calculate_difference_iblt(
     n_dropped: usize,
     logged_elems: &Vec<BigUint>,
@@ -115,6 +118,7 @@ fn calculate_difference_iblt(
 /// - `removed_u32`: the set of DJB hashes of removed elements from the IBLT.
 ///    Elements are necessarily unique or they would have hashed to the same
 ///    slot in the IBLT.
+#[cfg(not(feature = "disable_validation"))]
 fn check_digest_from_removed_set(
     expected_digest: &Digest,
     elems: Vec<&BigUint>,
@@ -179,6 +183,7 @@ fn check_digest_from_removed_set(
 ///    elements already removed from the IBLT
 /// - `elems`: the list of logged elements
 /// - `iblt`: the difference IBLT
+#[cfg(not(feature = "disable_validation"))]
 fn solve_ilp_for_iblt(
     n_dropped_remaining: usize,
     elems: &Vec<BigUint>,
