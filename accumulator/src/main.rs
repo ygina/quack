@@ -24,7 +24,6 @@ async fn pcap_listen_mock(
     log: Option<&str>,
     bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
-    _timeout: i32,
 ) {
     let packets = vec![
         vec![125; bytes],
@@ -57,10 +56,8 @@ async fn pcap_listen(
     log: Option<&str>,
     bytes: usize,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
-    timeout: i32,
 ) {
     use std::process::{Command, Stdio};
-    use std::time::Instant;
     let mut child = {
         let tcpdump = Command::new("tcpdump")
             .arg("--immediate-mode")
@@ -89,17 +86,11 @@ async fn pcap_listen(
 
     let stdout = child.stdout.as_mut().unwrap();
 
-    let now = Instant::now();
     let mut reader = create_reader(65536, stdout).unwrap();
     let mut n: usize = 0;
     loop {
         // TODO: This isn't perfect, because tcpdump is set up to buffer so reader.next() could
         // theoretically block for an arbitrarily long period of time.
-        let elapsed_time = now.elapsed();
-        if elapsed_time.as_millis() > timeout.try_into().unwrap() {
-            debug!("timeout");
-            break;
-        }
         match reader.next() {
             Ok((offset, block)) => {
                 match block {
@@ -175,13 +166,6 @@ async fn main() {
                 to the given filename (suggested: accum.pcap).")
             .long("log")
             .takes_value(true))
-        .arg(Arg::new("timeout")
-            .help("Read timeout for the capture, in ms. The library uses 0 \
-                by default, blocking indefinitely, but causes the capture \
-                to hang in MacOS.")
-            .long("timeout")
-            .takes_value(true)
-            .default_value("10000000"))
         .arg(Arg::new("port")
             .help("TCP port to listen on. Returns the serialized digest to \
                 any connection on this port")
@@ -215,7 +199,6 @@ async fn main() {
             .required(true))
         .get_matches();
 
-    let timeout: i32 = matches.value_of("timeout").unwrap().parse().unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
     let log = matches.value_of("log");
@@ -236,9 +219,9 @@ async fn main() {
         tcp_listen(lock_clone, port).await;
     });
     if matches.is_present("mock") {
-        pcap_listen_mock(log, bytes, lock, timeout).await;
+        pcap_listen_mock(log, bytes, lock).await;
     } else {
-        pcap_listen(log, bytes, lock, timeout).await;
+        pcap_listen(log, bytes, lock).await;
     }
     join.await.unwrap();
 }
