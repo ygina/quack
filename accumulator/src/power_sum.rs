@@ -407,7 +407,7 @@ impl Accumulator for PowerSumAccumulator {
         let t7 = Instant::now();
         debug!("prepared combos for resolving djb collisions: {:?}", t7 - t6);
 
-        info!("accounted for {} dropped elements", dropped);
+        debug!("accounted for {} dropped elements", dropped);
         let mut n_digests = 0;
         for curr in combinations.into_iter().multi_cartesian_product() {
             // check curr, if good return it else return None

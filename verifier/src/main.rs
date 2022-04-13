@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+use std::time::Instant;
 use std::net::TcpStream;
 use std::io::Read;
 use std::collections::{HashMap, HashSet};
@@ -111,7 +112,6 @@ fn get_router_logs(
     debug!("parsing pcap format {} bytes", data.len());
     let mut reader = create_reader(65536, Cursor::new(data)).unwrap();
     let mut res = Vec::new();
-    let mut n = 0;
     let mut maybe_truncated = false;
     loop {
         match reader.next() {
@@ -119,18 +119,12 @@ fn get_router_logs(
                 maybe_truncated = false;
                 match block {
                     PcapBlockOwned::Legacy(block) => {
-                        n += 1;
                         res.push(BigUint::from_bytes_be(&block.data[14..(14 + nbytes)]));
-                        if n % 1000 == 0 {
-                            debug!("processed {} packets", n);
-                        }
                     },
                     PcapBlockOwned::NG(block) => {
                         debug!("ignoring NG({:?}) offset={}", block, offset);
                     },
-                    PcapBlockOwned::LegacyHeader(block) => {
-                        debug!("ignoring LegacyHeader({:?}) offset={}", block, offset);
-                    },
+                    PcapBlockOwned::LegacyHeader(_) => {},
                 }
                 reader.consume(offset);
             },
@@ -328,16 +322,21 @@ fn main() {
             bytes,
         )
     } else {
+        let t1 = Instant::now();
         let accumulator = get_accumulator(
             accumulator_ssh,
             port,
             accumulator_type,
         );
+        let t2 = Instant::now();
+        info!("get_accumulator: {:?}", t2 - t1);
         let router_logs = get_router_logs(
             router_ssh,
             filename,
             bytes,
         );
+        let t3 = Instant::now();
+        info!("get_router_logs: {:?}", t3 - t2);
         info!("{}/{} packets received", accumulator.total(), router_logs.len());
         assert!(accumulator.total() <= router_logs.len());
         if accumulator.validate(&router_logs) {
@@ -345,5 +344,8 @@ fn main() {
         } else {
             warn!("invalid router");
         }
+        let t4 = Instant::now();
+        info!("validation: {:?}", t4 - t3);
+        info!("TOTAL VERIFICATION TIME: {:?}", t4 - t1);
     }
 }

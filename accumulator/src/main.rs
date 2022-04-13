@@ -116,9 +116,7 @@ async fn pcap_listen(
                     PcapBlockOwned::NG(block) => {
                         debug!("ignoring NG({:?}) offset={}", block, offset);
                     },
-                    PcapBlockOwned::LegacyHeader(block) => {
-                        debug!("ignoring LegacyHeader({:?}) offset={}", block, offset);
-                    },
+                    PcapBlockOwned::LegacyHeader(_) => {},
                 }
                 reader.consume(offset);
             },
