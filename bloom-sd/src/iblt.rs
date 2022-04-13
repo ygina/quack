@@ -52,7 +52,7 @@ impl InvBloomLookupTable {
         let num_hashes = 2;
         // 4 is a multiplier that is experimentally found to reduce the number
         // of false positives (stating the router is malicious when it is not)
-        let num_entries = 4 * expected_num_items as usize;
+        let num_entries = 10 * expected_num_items as usize;
         let mut rng = rand::thread_rng();
         InvBloomLookupTable {
             data: vec![0; num_entries],
