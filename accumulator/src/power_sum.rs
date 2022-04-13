@@ -37,7 +37,6 @@ const LARGE_PRIME: i64 = 51539607551;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PowerSumAccumulator {
     digest: Digest,
-    num_elems: usize,
     power_sums: Vec<i64>,
 }
 
@@ -233,7 +232,6 @@ impl PowerSumAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
             digest: Digest::new(),
-            num_elems: 0,
             power_sums: (0..threshold).map(|_| 0).collect(),
         }
     }
@@ -246,7 +244,6 @@ impl Accumulator for PowerSumAccumulator {
 
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
-        self.num_elems += 1;
         let mut value: i64 = 1;
         for i in 0..self.power_sums.len() {
             value = mul_and_mod(value, bloom_sd::elem_to_u32(elem) as _,
@@ -262,7 +259,7 @@ impl Accumulator for PowerSumAccumulator {
     }
 
     fn total(&self) -> usize {
-        self.num_elems
+        self.digest.count as usize
     }
 
     #[cfg(feature = "disable_validation")]

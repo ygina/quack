@@ -45,7 +45,6 @@ const FALSE_POSITIVE_RATE: f32 = 0.0001;
 #[derive(Serialize, Deserialize)]
 pub struct IBLTAccumulator {
     digest: Digest,
-    num_elems: usize,
     iblt: InvBloomLookupTable,
 }
 
@@ -247,7 +246,6 @@ impl IBLTAccumulator {
             iblt.num_entries(), BITS_PER_ENTRY);
         Self {
             digest: Digest::new(),
-            num_elems: 0,
             iblt,
         }
     }
@@ -265,14 +263,12 @@ impl IBLTAccumulator {
             (iblt.num_entries() as usize) * (BITS_PER_ENTRY + data_size) / 8);
         Self {
             digest: Digest::new(),
-            num_elems: 0,
             iblt,
         }
     }
 
     pub fn equals(&self, other: &Self) -> bool {
         self.digest == other.digest
-            && self.num_elems == other.num_elems
             && self.iblt.equals(&other.iblt)
     }
 }
@@ -284,7 +280,6 @@ impl Accumulator for IBLTAccumulator {
 
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
-        self.num_elems += 1;
         self.iblt.insert(elem);
     }
 
@@ -295,7 +290,7 @@ impl Accumulator for IBLTAccumulator {
     }
 
     fn total(&self) -> usize {
-        self.num_elems
+        self.digest.count as usize
     }
 
     #[cfg(feature = "disable_validation")]

@@ -20,14 +20,12 @@ use digest::Digest;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NaiveAccumulator {
     digest: Digest,
-    num_elems: usize,
 }
 
 impl NaiveAccumulator {
     pub fn new() -> Self {
         Self {
             digest: Digest::new(),
-            num_elems: 0,
         }
     }
 }
@@ -39,7 +37,6 @@ impl Accumulator for NaiveAccumulator {
 
     fn process(&mut self, elem: &BigUint) {
         self.digest.add(elem);
-        self.num_elems += 1;
     }
 
     fn process_batch(&mut self, elems: &Vec<BigUint>) {
@@ -49,7 +46,7 @@ impl Accumulator for NaiveAccumulator {
     }
 
     fn total(&self) -> usize {
-        self.num_elems
+        self.digest.count as usize
     }
 
     #[cfg(feature = "disable_validation")]
@@ -61,7 +58,7 @@ impl Accumulator for NaiveAccumulator {
     fn validate(&self, elems: &Vec<BigUint>) -> bool {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
-                .combinations(self.num_elems).enumerate() {
+                .combinations(self.total()).enumerate() {
             let mut digest = Digest::new();
             // We could amortize digest calculation using the previous digest,
             // but it's still exponential in the number of subsets
