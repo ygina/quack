@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn init_iblt_with_rate() {
         let iblt = init_iblt();
-        assert_eq!(iblt.num_entries(), 96);
+        assert_eq!(iblt.num_entries(), 10*4);
         assert_eq!(iblt.num_hashes(), 2);
         assert_eq!(vvsum(iblt.counters()), 0);
         assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
