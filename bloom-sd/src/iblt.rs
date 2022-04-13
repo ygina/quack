@@ -40,15 +40,19 @@ impl InvBloomLookupTable {
     /// in `rate`.
     pub fn with_rate(
         bits_per_entry: usize,
-        rate: f32,
+        _rate: f32,
         expected_num_items: u32,
     ) -> Self {
         // TODO: determine number of entries and hashes from IBLT paper
-        let num_entries = bloom::bloom::needed_bits(rate, expected_num_items);
-        let num_hashes = bloom::bloom::optimal_num_hashes(
-            bits_per_entry,
-            expected_num_items,
-        );
+        // let num_entries = bloom::bloom::needed_bits(rate, expected_num_items);
+        // let num_hashes = bloom::bloom::optimal_num_hashes(
+        //     bits_per_entry,
+        //     expected_num_items,
+        // );
+        let num_hashes = 2;
+        // 4 is a multiplier that is experimentally found to reduce the number
+        // of false positives (stating the router is malicious when it is not)
+        let num_entries = 4 * expected_num_items as usize;
         let mut rng = rand::thread_rng();
         InvBloomLookupTable {
             data: vec![0; num_entries],

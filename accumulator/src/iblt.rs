@@ -45,7 +45,7 @@ pub struct IBLTAccumulator {
 }
 
 // TODO: IBLT parameters
-const BITS_PER_ENTRY: usize = 16;
+const BITS_PER_ENTRY: usize = 8;
 const FALSE_POSITIVE_RATE: f32 = 0.0001;
 
 impl IBLTAccumulator {
@@ -143,10 +143,10 @@ impl Accumulator for IBLTAccumulator {
             let received_count = self.iblt.counters().get(i);
             // Handle counter overflows i.e. if the Bloom filter
             // stores the count modulo some number instead of the exact count
-            // TODO: write a test for wraparound
+            // TODO: might not be 0xffff if num bits per entry changes
             let difference_count =
                 (Wrapping(processed_count) - Wrapping(received_count)).0
-                & 0xffff;
+                & 0xff;
             iblt.counters_mut().set(i, difference_count);
             iblt_sum += difference_count;
 
@@ -162,7 +162,7 @@ impl Accumulator for IBLTAccumulator {
         }
         // Sanity check the difference IBLT due to wraparound.
         let var = n_dropped != (iblt_sum / iblt.num_hashes()) as usize;
-        if n_dropped <= (0xffff / iblt.num_hashes()) as _ && var {
+        if n_dropped <= (0xff / iblt.num_hashes()) as _ && var {
             return false;
         } else if var {
             panic!("wrapped around even in the difference iblt, \
