@@ -6,7 +6,6 @@ use std::collections::{HashSet, HashMap};
 use std::num::Wrapping;
 
 use bincode;
-use num_bigint::BigUint;
 #[cfg(not(feature = "disable_validation"))]
 use num_traits::Zero;
 use serde::{Serialize, Deserialize};
@@ -58,7 +57,7 @@ pub struct IBLTAccumulator {
 #[cfg(not(feature = "disable_validation"))]
 fn calculate_difference_iblt(
     n_dropped: usize,
-    logged_elems: &Vec<BigUint>,
+    logged_elems: &Vec<Vec<u8>>,
     received_iblt: &InvBloomLookupTable,
 ) -> Option<InvBloomLookupTable> {
     let mut iblt = received_iblt.empty_clone();
@@ -121,14 +120,14 @@ fn calculate_difference_iblt(
 #[cfg(not(feature = "disable_validation"))]
 fn check_digest_from_removed_set(
     expected_digest: &Digest,
-    elems: Vec<&BigUint>,
+    elems: Vec<&Vec<u8>>,
     removed: HashSet<u32>,
 ) -> bool {
     // Create a map from DJB hash to elements that hash to that value. If the
     // DJB hash is not in the removed set, then the packet was not dropped, so
     // add it to the digest. Otherwise, it might have been dropped.
     let mut digest = Digest::new();
-    let mut collisions_map: HashMap<u32, Vec<&BigUint>> = HashMap::new();
+    let mut collisions_map: HashMap<u32, Vec<&Vec<u8>>> = HashMap::new();
     for elem in elems {
         let elem_u32 = bloom_sd::elem_to_u32(&elem);
         if removed.contains(&elem_u32) {
@@ -186,7 +185,7 @@ fn check_digest_from_removed_set(
 #[cfg(not(feature = "disable_validation"))]
 fn solve_ilp_for_iblt(
     n_dropped_remaining: usize,
-    elems: &Vec<BigUint>,
+    elems: &Vec<Vec<u8>>,
     iblt: InvBloomLookupTable,
 ) -> Option<HashSet<usize>> {
     // Number of equations = # of remaining candidate elements in `elems_i`.
@@ -283,12 +282,12 @@ impl Accumulator for IBLTAccumulator {
         bincode::serialize(self).unwrap()
     }
 
-    fn process(&mut self, elem: &BigUint) {
+    fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         self.iblt.insert(elem);
     }
 
-    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+    fn process_batch(&mut self, elems: &Vec<Vec<u8>>) {
         for elem in elems {
             self.process(elem);
         }
@@ -299,12 +298,12 @@ impl Accumulator for IBLTAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
         let t1 = Instant::now();
         if elems.len() < self.total() {
             warn!("more elements received than logged");
@@ -394,11 +393,12 @@ mod tests {
     use bincode;
     use rand;
     use rand::Rng;
-    use num_bigint::ToBigUint;
 
-    fn gen_elems(n: usize) -> Vec<BigUint> {
+    const NBYTES: usize = 16;
+
+    fn gen_elems(n: usize) -> Vec<Vec<u8>> {
         let mut rng = rand::thread_rng();
-        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+        (0..n).map(|_| (0..NBYTES).map(|_| rng.gen::<u8>()).collect()).collect()
     }
 
     #[test]

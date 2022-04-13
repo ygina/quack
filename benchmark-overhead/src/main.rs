@@ -5,7 +5,6 @@ use rand;
 use rand::Rng;
 use std::time::Instant;
 use clap::{Arg, Command};
-use num_bigint::BigUint;
 use accumulator::*;
 
 const BATCH_UNIT: u32 = 100;
@@ -15,15 +14,15 @@ impl Accumulator for MockAccumulator {
     fn to_bytes(&self) -> Vec<u8> {
         unimplemented!()
     }
-    fn process(&mut self, _elem: &BigUint) {
+    fn process(&mut self, _elem: &[u8]) {
     }
-    fn process_batch(&mut self, _elems: &Vec<BigUint>) {
+    fn process_batch(&mut self, _elems: &Vec<Vec<u8>>) {
         unimplemented!()
     }
     fn total(&self) -> usize {
         unimplemented!()
     }
-    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
         unimplemented!()
     }
 }
@@ -90,9 +89,8 @@ fn main() {
 
     // Generate elements.
     let mut rng = rand::thread_rng();
-    let elems: Vec<BigUint> = (0..n)
+    let elems: Vec<Vec<u8>> = (0..n)
         .map(|_| (0..b).map(|_| rng.gen::<u8>()).collect::<Vec<_>>())
-        .map(|bytes| BigUint::from_bytes_be(&bytes[..]))
         .collect();
     info!("per {} packets", BATCH_UNIT);
     for i in 0..tys.len() {

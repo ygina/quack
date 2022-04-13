@@ -3,7 +3,6 @@ use std::time::Instant;
 use bincode;
 #[cfg(not(feature = "disable_validation"))]
 use itertools::Itertools;
-use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
 
 use crate::Accumulator;
@@ -35,11 +34,11 @@ impl Accumulator for NaiveAccumulator {
         bincode::serialize(self).unwrap()
     }
 
-    fn process(&mut self, elem: &BigUint) {
+    fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
     }
 
-    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+    fn process_batch(&mut self, elems: &Vec<Vec<u8>>) {
         for elem in elems {
             self.process(elem);
         }
@@ -50,12 +49,12 @@ impl Accumulator for NaiveAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
                 .combinations(self.total()).enumerate() {
@@ -82,11 +81,12 @@ mod tests {
     use bincode;
     use rand;
     use rand::Rng;
-    use num_bigint::ToBigUint;
 
-    fn gen_elems(n: usize) -> Vec<BigUint> {
+    const NBYTES: usize = 16;
+
+    fn gen_elems(n: usize) -> Vec<Vec<u8>> {
         let mut rng = rand::thread_rng();
-        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+        (0..n).map(|_| (0..NBYTES).map(|_| rng.gen::<u8>()).collect()).collect()
     }
 
     #[test]

@@ -57,17 +57,17 @@ impl AdditiveMsetHash {
     }
 
     /// Adds an element to the digest.
-    pub fn add(&mut self, elem: &BigUint) {
-        let hash = hash_fn(1, &elem.to_bytes_be());
+    pub fn add(&mut self, elem: &[u8]) {
+        let hash = hash_fn(1, elem);
         self.hash = add_hashes(&self.hash, &hash);
         // assume no overflow
         self.count += 1;
     }
 
     /// Adds multiple elements to the digest.
-    pub fn add_all(&mut self, elems: &Vec<BigUint>) {
+    pub fn add_all(&mut self, elems: &Vec<Vec<u8>>) {
         for elem in elems {
-            let hash = hash_fn(1, &elem.to_bytes_be());
+            let hash = hash_fn(1, elem);
             self.hash = add_hashes(&self.hash, &hash);
         }
         self.count += elems.len() as u32;
@@ -94,13 +94,14 @@ impl AdditiveMsetHash {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::ToBigUint;
     use rand::seq::SliceRandom;
     use super::*;
 
-    fn gen_elements(n: usize) -> Vec<BigUint> {
+    const NBYTES: usize = 16;
+
+    fn gen_elements(n: usize) -> Vec<Vec<u8>> {
         let mut rng = rand::thread_rng();
-        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+        (0..n).map(|_| (0..NBYTES).map(|_| rng.gen::<u8>()).collect()).collect()
     }
 
     #[test]

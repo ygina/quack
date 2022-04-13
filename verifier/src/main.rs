@@ -8,10 +8,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::io::Cursor;
 
+use hex;
 use bincode;
 use ssh2::Session;
 use clap::{Arg, Command};
-use num_bigint::BigUint;
 use accumulator::*;
 
 use pcap_parser::*;
@@ -87,7 +87,7 @@ fn get_router_logs(
     filename: &str,
     nbytes: usize,
     drop: Option<usize>
-) -> Vec<BigUint> {
+) -> Vec<Vec<u8>> {
     let data: Vec<u8> = if let Some(ssh) = ssh {
         let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
         let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
@@ -120,7 +120,7 @@ fn get_router_logs(
                 maybe_truncated = false;
                 match block {
                     PcapBlockOwned::Legacy(block) => {
-                        res.push(BigUint::from_bytes_be(&block.data[14..(14 + nbytes)]));
+                        res.push(block.data[14..(14 + nbytes)].to_vec());
                     },
                     PcapBlockOwned::NG(block) => {
                         debug!("ignoring NG({:?}) offset={}", block, offset);
@@ -163,8 +163,8 @@ fn get_router_logs(
 
 /// Logs seem to have many repeated entries.
 /// Maps log values to indexes at which they occur.
-fn to_map(logs: &Vec<BigUint>) -> HashMap<BigUint, Vec<usize>> {
-    let mut map: HashMap<BigUint, Vec<usize>> = HashMap::new();
+fn to_map(logs: &Vec<Vec<u8>>) -> HashMap<Vec<u8>, Vec<usize>> {
+    let mut map: HashMap<Vec<u8>, Vec<usize>> = HashMap::new();
     for (i, entry) in logs.iter().enumerate() {
         (*map.entry(entry.clone()).or_insert(vec![])).push(i+1);
     }
@@ -173,7 +173,7 @@ fn to_map(logs: &Vec<BigUint>) -> HashMap<BigUint, Vec<usize>> {
 
 /// Compares maps to each other. Metrics include number of entries, number of
 /// shared keys, and counts of shared keys.
-fn compare_maps(m1: HashMap<BigUint, Vec<usize>>, m2: HashMap<BigUint, Vec<usize>>) {
+fn compare_maps(m1: HashMap<Vec<u8>, Vec<usize>>, m2: HashMap<Vec<u8>, Vec<usize>>) {
     let mut is_subset = true;
     for (k, v2) in m2.iter() {
         if let Some(v1) = m1.get(k) {
@@ -199,9 +199,9 @@ fn compare_maps(m1: HashMap<BigUint, Vec<usize>>, m2: HashMap<BigUint, Vec<usize
     }
     let m1_keys = m1.keys().collect::<HashSet<_>>();
     let m2_keys = m2.keys().collect::<HashSet<_>>();
-    let mut shared_keys: HashSet<BigUint> = HashSet::new();
-    let mut m1_only: HashSet<BigUint> = HashSet::new();
-    let mut m2_only: HashSet<BigUint> = HashSet::new();
+    let mut shared_keys: HashSet<Vec<u8>> = HashSet::new();
+    let mut m1_only: HashSet<Vec<u8>> = HashSet::new();
+    let mut m2_only: HashSet<Vec<u8>> = HashSet::new();
     for &k in &m1_keys {
         if !m2_keys.contains(k) {
             m1_only.insert(k.clone());
@@ -223,8 +223,8 @@ fn compare_maps(m1: HashMap<BigUint, Vec<usize>>, m2: HashMap<BigUint, Vec<usize
         let m1_v = m1.get(k).unwrap();
         let m2_v = m2.get(k).unwrap();
         if m1_v.len() < m2_v.len() {
-            debug!("shared key 0x{:X} values differ: {:?} < {:?}", k, m1_v,
-               m2_v);
+            debug!("shared key 0x{} values differ: {:?} < {:?}",
+                hex::encode(k), m1_v, m2_v);
         }
     }
     // debug!("keys in m1 but not m2: {}", m1_only.len());
@@ -233,7 +233,7 @@ fn compare_maps(m1: HashMap<BigUint, Vec<usize>>, m2: HashMap<BigUint, Vec<usize
     // }
     debug!("keys in m2 but not m1: {}", m2_only.len());
     for k in m2_only {
-        println!("0x{:X} {:?}", k, m2.get(&k).unwrap());
+        println!("0x{} {:?}", hex::encode(&k), m2.get(&k).unwrap());
     }
 }
 
@@ -250,13 +250,13 @@ fn check_acc_logs(
     let router_logs = get_router_logs(router_ssh, router_filename, bytes, drop);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
-        println!("0x{:X}", router_logs[i]);
+        println!("0x{}", hex::encode(&router_logs[i]));
     }
     info!("accumulator logs:");
     let accumulator_logs = get_router_logs(acc_ssh, acc_filename, bytes, None);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
-        println!("0x{:X}", accumulator_logs[i]);
+        println!("0x{}", hex::encode(&accumulator_logs[i]));
     }
     compare_maps(router_logs_map, accumulator_logs_map);
 }

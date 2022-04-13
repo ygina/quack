@@ -1,11 +1,11 @@
 use rand::{self, Rng};
-use num_bigint::{BigUint, ToBigUint};
 
-pub const MALICIOUS_ELEM: u128 = u128::max_value();
+const NBYTES: usize = 16;
+pub const MALICIOUS_ELEM: [u8; NBYTES] = [0; NBYTES];
 
 pub struct LoadGenerator {
     /// The logged packets. All elements are in the range [0, MALICIOUS_ELEM).
-    pub log: Vec<BigUint>,
+    pub log: Vec<Vec<u8>>,
     /// Probability that a logged packet is dropped.
     p_dropped: f32,
     /// The index of the malicious packet, if the router is malicious
@@ -32,10 +32,10 @@ impl LoadGenerator {
     /// will generate all packets the ISP actually receives.
     pub fn new(num_logged: usize, p_dropped: f32, malicious: bool) -> Self {
         let mut rng = rand::thread_rng();
-        let log: Vec<BigUint> = (0..num_logged).map(|_| loop {
-            let elem = rng.gen::<u128>();
+        let log: Vec<Vec<u8>> = (0..num_logged).map(|_| loop {
+            let elem: Vec<_> = (0..NBYTES).map(|_| rng.gen::<u8>()).collect();
             if elem != MALICIOUS_ELEM {
-                break elem.to_biguint().unwrap();
+                break elem;
             }
         }).collect();
         let malicious_i: Option<usize> = if malicious {
@@ -56,7 +56,7 @@ impl LoadGenerator {
 }
 
 impl Iterator for LoadGenerator {
-    type Item = BigUint;
+    type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -70,7 +70,7 @@ impl Iterator for LoadGenerator {
             // Send MALICIOUS_ELEM if we are on the malicious index
             if let Some(malicious_i) = self.malicious_i {
                 if malicious_i == self.index - 1 {
-                    return Some(MALICIOUS_ELEM.to_biguint().unwrap());
+                    return Some(MALICIOUS_ELEM.to_vec());
                 }
             }
             // Continue until the packet is not dropped
@@ -141,8 +141,8 @@ mod tests {
         assert_eq!(g.num_logged, NUM_LOGGED);
         assert!(g.num_dropped > 0); //with high probability
         assert_eq!(processed.len(), g.num_logged - g.num_dropped);
-        assert!(!g.log.contains(&MALICIOUS_ELEM.to_biguint().unwrap()));
-        assert!(processed.contains(&MALICIOUS_ELEM.to_biguint().unwrap()));
+        assert!(!g.log.contains(&MALICIOUS_ELEM.to_vec()));
+        assert!(processed.contains(&MALICIOUS_ELEM.to_vec()));
     }
 
     #[test]

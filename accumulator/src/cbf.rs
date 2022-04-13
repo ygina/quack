@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use bincode;
-use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
 use bloom_sd::CountingBloomFilter;
 use crate::Accumulator;
@@ -68,13 +67,13 @@ impl Accumulator for CBFAccumulator {
         bincode::serialize(self).unwrap()
     }
 
-    fn process(&mut self, elem: &BigUint) {
+    fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         self.num_elems += 1;
         self.cbf.insert(&elem);
     }
 
-    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+    fn process_batch(&mut self, elems: &Vec<Vec<u8>>) {
         for elem in elems {
             self.process(elem);
         }
@@ -85,12 +84,12 @@ impl Accumulator for CBFAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
         let t1 = Instant::now();
         if elems.len() < self.total() {
             warn!("more elements received than logged");
@@ -173,7 +172,7 @@ impl Accumulator for CBFAccumulator {
         let t4 = Instant::now();
         debug!("solved ILP: {:?}", t4 - t3);
         if err == 0 {
-            let mut dropped_count: HashMap<BigUint, usize> = HashMap::new();
+            let mut dropped_count: HashMap<Vec<u8>, usize> = HashMap::new();
             for dropped_i in dropped {
                 let elem = &elems[elems_i[dropped_i]];
                 let count = dropped_count.entry(elem.clone()).or_insert(0);
@@ -193,11 +192,12 @@ mod tests {
     use bincode;
     use rand;
     use rand::Rng;
-    use num_bigint::ToBigUint;
 
-    fn gen_elems(n: usize) -> Vec<BigUint> {
+    const NBYTES: usize = 16;
+
+    fn gen_elems(n: usize) -> Vec<Vec<u8>> {
         let mut rng = rand::thread_rng();
-        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+        (0..n).map(|_| (0..NBYTES).map(|_| rng.gen::<u8>()).collect()).collect()
     }
 
     #[test]

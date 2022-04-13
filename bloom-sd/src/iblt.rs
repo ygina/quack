@@ -4,7 +4,6 @@ use std::num::Wrapping;
 
 use rand;
 use rand::Rng;
-use num_bigint::BigUint;
 use serde::{Serialize, Deserialize};
 use djb_hash::{HasherU32, x33a_u32::*};
 use siphasher::sip128::SipHasher13;
@@ -27,9 +26,9 @@ pub struct InvBloomLookupTable {
 }
 
 /// Maps an element in the lookup table to a u32.
-pub fn elem_to_u32(elem: &BigUint) -> u32 {
+pub fn elem_to_u32(elem: &[u8]) -> u32 {
     let mut hasher = X33aU32::new();
-    hasher.write(&elem.to_bytes_be());
+    hasher.write(&elem);
     hasher.finish_u32()
 }
 
@@ -124,7 +123,7 @@ impl InvBloomLookupTable {
 
     /// Inserts an item, returns true if the item was already in the filter
     /// any number of times.
-    pub fn insert(&mut self, item: &BigUint) -> bool {
+    pub fn insert(&mut self, item: &[u8]) -> bool {
         let mut min = u32::max_value();
         let item_u32 = elem_to_u32(item);
         for h in HashIter::from(item_u32,
@@ -148,7 +147,7 @@ impl InvBloomLookupTable {
     }
 
     /// Removes an item, panics if the item does not exist.
-    pub fn remove(&mut self, item: &BigUint) {
+    pub fn remove(&mut self, item: &[u8]) {
         let item_u32 = elem_to_u32(item);
         self.remove_u32(item_u32);
     }
@@ -172,7 +171,7 @@ impl InvBloomLookupTable {
 
     /// Checks if the item has been inserted into this InvBloomLookupTable.
     /// This function can return false positives, but not false negatives.
-    pub fn contains(&self, item: &BigUint) -> bool {
+    pub fn contains(&self, item: &[u8]) -> bool {
         let item_u32 = elem_to_u32(item);
         for h in HashIter::from(item_u32,
                                 self.num_hashes,
@@ -188,7 +187,7 @@ impl InvBloomLookupTable {
     }
 
     /// Gets the indexes of the item in the vector.
-    pub fn indexes(&self, item: &BigUint) -> Vec<usize> {
+    pub fn indexes(&self, item: &[u8]) -> Vec<usize> {
         let item_u32 = elem_to_u32(item);
         HashIter::from(item_u32,
                        self.num_hashes,
@@ -229,7 +228,7 @@ impl InvBloomLookupTable {
 mod tests {
     use super::*;
     use bincode;
-    use num_bigint::ToBigUint;
+    use num_bigint::BigUint;
     use num_traits::Zero;
 
     fn init_iblt() -> InvBloomLookupTable {
@@ -252,7 +251,7 @@ mod tests {
     #[test]
     fn test_serialization_with_data() {
         let mut iblt1 = init_iblt();
-        iblt1.insert(&1234_u32.to_biguint().unwrap());
+        iblt1.insert(&1234_u32.to_be_bytes());
         let bytes = bincode::serialize(&iblt1).unwrap();
         let iblt2 = bincode::deserialize(&bytes).unwrap();
         assert!(iblt1.equals(&iblt2));
@@ -261,7 +260,7 @@ mod tests {
     #[test]
     fn init_iblt_with_rate() {
         let iblt = init_iblt();
-        assert_eq!(iblt.num_entries(), 10*4);
+        assert_eq!(iblt.num_entries(), 10*10);
         assert_eq!(iblt.num_hashes(), 2);
         assert_eq!(vvsum(iblt.counters()), 0);
         assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
@@ -275,7 +274,7 @@ mod tests {
         assert!(!iblt1.equals(&iblt2), "different random state");
         let iblt3 = iblt1.empty_clone();
         assert!(iblt1.equals(&iblt3), "empty clone duplicates random state");
-        iblt1.insert(&1234_u32.to_biguint().unwrap());
+        iblt1.insert(&1234_u32.to_be_bytes());
         let iblt4 = iblt1.empty_clone();
         assert!(!iblt1.equals(&iblt4), "empty clone removes data");
         assert!(iblt1.equals(&iblt1), "reflexive equality");
@@ -285,7 +284,7 @@ mod tests {
     #[test]
     fn test_insert() {
         let mut iblt = init_iblt();
-        let elem = 1234_u32.to_biguint().unwrap();
+        let elem = 1234_u32.to_be_bytes();
         let indexes = iblt.indexes(&elem);
         for &idx in &indexes {
             assert_eq!(iblt.counters().get(idx), 0);
@@ -308,25 +307,25 @@ mod tests {
     #[test]
     fn test_empty_clone() {
         let mut iblt1 = init_iblt();
-        iblt1.insert(&1234_u32.to_biguint().unwrap());
-        iblt1.insert(&5678_u32.to_biguint().unwrap());
+        iblt1.insert(&1234_u32.to_be_bytes());
+        iblt1.insert(&5678_u32.to_be_bytes());
         let iblt2 = iblt1.empty_clone();
         assert!(vvsum(iblt1.counters()) > 0);
         assert_eq!(vvsum(iblt2.counters()), 0);
-        assert!(iblt1.data().iter().sum::<u32>() > 0);
-        assert_eq!(iblt2.data().iter().sum::<u32>(), 0);
+        assert_ne!(iblt1.data().iter().sum::<BigUint>(), BigUint::zero());
+        assert_eq!(iblt2.data().iter().sum::<BigUint>(), BigUint::zero());
         assert_eq!(
-            iblt1.indexes(&1234_u32.to_biguint().unwrap()),
-            iblt2.indexes(&1234_u32.to_biguint().unwrap()));
+            iblt1.indexes(&1234_u32.to_be_bytes()),
+            iblt2.indexes(&1234_u32.to_be_bytes()));
     }
 
     #[test]
     fn counter_overflow() {
         // test should not panic because we handle counter overflows now
         let mut iblt = InvBloomLookupTable::with_rate(1, 0.01, 10);
-        iblt.insert(&1234_u32.to_biguint().unwrap());
+        iblt.insert(&1234_u32.to_be_bytes());
         assert_ne!(vvsum(iblt.counters()), 0);
-        iblt.insert(&1234_u32.to_biguint().unwrap());
+        iblt.insert(&1234_u32.to_be_bytes());
         assert_eq!(vvsum(iblt.counters()), 0);
     }
 }

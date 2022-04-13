@@ -5,7 +5,6 @@ use std::time::Instant;
 
 use bincode;
 use serde::{Serialize, Deserialize};
-use num_bigint::BigUint;
 #[cfg(not(feature = "disable_validation"))]
 use tokio::task;
 #[cfg(not(feature = "disable_validation"))]
@@ -242,7 +241,7 @@ impl Accumulator for PowerSumAccumulator {
         bincode::serialize(self).unwrap()
     }
 
-    fn process(&mut self, elem: &BigUint) {
+    fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         let mut value: i64 = 1;
         for i in 0..self.power_sums.len() {
@@ -252,7 +251,7 @@ impl Accumulator for PowerSumAccumulator {
         }
     }
 
-    fn process_batch(&mut self, elems: &Vec<BigUint>) {
+    fn process_batch(&mut self, elems: &Vec<Vec<u8>>) {
         for elem in elems {
             self.process(elem);
         }
@@ -263,12 +262,12 @@ impl Accumulator for PowerSumAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<BigUint>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
         if self.total() == 0 {
             warn!("no elements received, valid by default");
             return true;
@@ -347,7 +346,7 @@ impl Accumulator for PowerSumAccumulator {
         };
 
         let mut digest = Digest::new();
-        let mut collisions: HashMap<u32, Vec<BigUint>> = HashMap::new();
+        let mut collisions: HashMap<u32, Vec<Vec<u8>>> = HashMap::new();
         for elem in elems {
             let elem_u32 = bloom_sd::elem_to_u32(elem);
             if !dropped_counts.contains_key(&elem_u32) {
@@ -394,7 +393,7 @@ impl Accumulator for PowerSumAccumulator {
                     }
                     combinations.push(map.into_iter()
                         .flat_map(|(elem, count)| vec![elem.clone(); count])
-                        .collect::<Vec<BigUint>>()
+                        .collect::<Vec<Vec<u8>>>()
                         .into_iter()
                         .combinations(received_count));
                     dropped += dropped_count;
@@ -432,11 +431,12 @@ mod test {
     use bincode;
     use rand;
     use rand::Rng;
-    use num_bigint::ToBigUint;
 
-    fn gen_elems(n: usize) -> Vec<BigUint> {
+    const NBYTES: usize = 16;
+
+    fn gen_elems(n: usize) -> Vec<Vec<u8>> {
         let mut rng = rand::thread_rng();
-        (0..n).map(|_| rng.gen::<u128>().to_biguint().unwrap()).collect()
+        (0..n).map(|_| (0..NBYTES).map(|_| rng.gen::<u8>()).collect()).collect()
     }
 
     #[test]

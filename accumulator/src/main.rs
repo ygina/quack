@@ -7,7 +7,6 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use clap::{Arg, Command};
-use num_bigint::BigUint;
 use accumulator::*;
 
 use pcap_parser::*;
@@ -43,7 +42,7 @@ async fn pcap_listen_mock(
     let mut accumulator = accumulator.lock().unwrap();
     for data in packets {
         let len = std::cmp::min(data.len(), bytes as usize);
-        let elem = BigUint::from_bytes_be(&data[..len]);
+        let elem = &data[..len];
         if let Some(f) = log.as_mut() {
             write_data(f, bytes, &data[..len]);
         }
@@ -100,7 +99,7 @@ async fn pcap_listen(
                             continue;
                         }
                         let hi = std::cmp::min(block.data.len(), 14 + bytes as usize);
-                        let elem = BigUint::from_bytes_be(&block.data[14..hi]);
+                        let elem = &block.data[14..hi];
                         // NOTE: many of these elements are not unique
                         // TODO: probably slow to put a lock around each packet.
                         // Maybe we can buffer and batch.
