@@ -1,4 +1,5 @@
 // psum.c
+#include <stdint.h>
 #include <pari/pari.h>
 
 int32_t find_integer_monic_polynomial_roots_libpari(
