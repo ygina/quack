@@ -7,7 +7,7 @@ use std::time::Instant;
 use clap::{Arg, Command};
 use accumulator::*;
 
-const BATCH_UNIT: u32 = 100;
+const BATCH_UNIT: u32 = 1000;
 
 struct MockAccumulator {}
 impl Accumulator for MockAccumulator {
@@ -44,7 +44,7 @@ fn main() {
             .help("Number of packets.")
             .short('n')
             .takes_value(true)
-            .default_value("10000"))
+            .default_value("1000"))
         .arg(Arg::new("bytes")
             .help("Number of bytes per packet.")
             .short('n')
@@ -55,7 +55,7 @@ fn main() {
             .help("Number of trials per accumulator.")
             .long("trials")
             .takes_value(true)
-            .default_value("11"))
+            .default_value("21"))
         .arg(Arg::new("threshold")
             .help("Threshold number of dropped packets for the IBLT and power \
                 sum accumulators.")

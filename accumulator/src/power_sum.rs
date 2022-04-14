@@ -244,9 +244,9 @@ impl Accumulator for PowerSumAccumulator {
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         let mut value: i64 = 1;
+        let elem_u32 = bloom_sd::elem_to_u32(elem) as i64;
         for i in 0..self.power_sums.len() {
-            value = mul_and_mod(value, bloom_sd::elem_to_u32(elem) as _,
-               LARGE_PRIME);
+            value = mul_and_mod(value, elem_u32, LARGE_PRIME);
             self.power_sums[i] = (self.power_sums[i] + value) % LARGE_PRIME;
         }
     }
