@@ -51,16 +51,8 @@ extern "C" {
 }
 
 /// https://www.geeksforgeeks.org/multiply-large-integers-under-large-modulo/
-fn mul_and_mod(mut a: i64, mut b: i64, modulo: i64) -> i64 {
-    let mut res = 0;
-    while b > 0 {
-        if (b & 1) == 1 {
-            res = (res + a) % modulo;
-        }
-        a = (2 * a) % modulo;
-        b >>= 1; // b = b / 2
-    }
-    res
+fn mul_and_mod(a: i64, b: i64, modulo: i64) -> i64 {
+    (((a as i128) * (b as i128)) % (modulo as i128)) as i64
 }
 
 // modular division
