@@ -60,8 +60,10 @@ fn mul_and_mod(a: i64, b: i64) -> i64 {
 
 // modular division
 #[cfg(not(feature = "disable_validation"))]
-fn div_and_mod(mut a: i64, mut b: i64) -> i64 {
+fn div_and_mod(a: u32, b: u32) -> u32 {
     // divide `a` and `b` by the GCD of `a` and `modulo`
+    let mut a = a as i64;
+    let mut b = b as i64;
     let gcd = {
         let (mut x, mut y) = if a < b {
             (a, b)
@@ -80,7 +82,7 @@ fn div_and_mod(mut a: i64, mut b: i64) -> i64 {
     a /= gcd;
     b /= gcd;
     if b == 1 {
-        return a;
+        return (a % LARGE_PRIME) as u32;
     }
 
     // find the modular multiplicative inverse of b mod modulo
@@ -103,7 +105,7 @@ fn div_and_mod(mut a: i64, mut b: i64) -> i64 {
     };
 
     // return the divided `a` value multiplied by the MMI in the field
-    mul_and_mod(a, mmi)
+    mul_and_mod(a, mmi) as u32
 }
 
 #[cfg(not(feature = "disable_validation"))]
@@ -179,7 +181,7 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<u32> {
         while sum < 0 {
             sum += LARGE_PRIME;
         }
-        e.push(div_and_mod(sum, i as i64 + 1));
+        e.push(div_and_mod((sum % LARGE_PRIME) as u32, i as u32 + 1) as i64);
     }
     for i in 0..(n+1) {
         if i & 1 != 0 {
