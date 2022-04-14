@@ -18,6 +18,7 @@ use itertools::Itertools;
 /// https://en.wikipedia.org/wiki/List_of_prime_numbers.
 /// This one is a Thabit prime, which is not of significance.
 const LARGE_PRIME: i64 =  4294967029;
+const LARGE_PRIME_U32: u32 =  4294967029;
 const DJB_MASK: u32 = (1 << 31) - 1;
 
 /// The power sum accumulator stores the power sums of all processed elements
@@ -44,9 +45,9 @@ pub struct PowerSumAccumulator {
 #[link(name = "pari", kind = "dylib")]
 extern "C" {
     fn find_integer_monic_polynomial_roots_libpari(
-        roots: *mut i64,
-        coeffs: *const i64,
-        field: i64,
+        roots: *mut u32,
+        coeffs: *const u32,
+        field: u32,
         degree: usize,
     ) -> i32;
 }
@@ -159,7 +160,7 @@ fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
 // ...
 // Returns the coefficients as positive numbers in the field GF(LARGE_PRIME).
 #[cfg(not(feature = "disable_validation"))]
-fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
+fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<u32> {
     let n = p.len();
     if n == 0 {
         return vec![];
@@ -186,7 +187,7 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
         }
     }
     // includes the leading coefficient
-    e
+    e.into_iter().map(|x| x as u32).collect()
 
     /*
     let n = p.len();
@@ -203,14 +204,14 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<i64> {
 
 #[cfg(not(feature = "disable_validation"))]
 fn find_integer_monic_polynomial_roots(
-    coeffs: Vec<i64>,
-) -> Result<Vec<i64>, String> {
-    let mut roots: Vec<i64> = vec![0; coeffs.len() - 1];
+    coeffs: Vec<u32>,
+) -> Result<Vec<u32>, String> {
+    let mut roots: Vec<u32> = vec![0; coeffs.len() - 1];
     if unsafe {
         find_integer_monic_polynomial_roots_libpari(
             roots.as_mut_ptr(),
             coeffs.as_ptr(),
-            LARGE_PRIME,
+            LARGE_PRIME_U32,
             roots.len(),
         )
     } == 0 {
@@ -501,7 +502,7 @@ mod test {
         let power_sums_diff = calculate_power_sums(&x, 3).await;
         assert_eq!(power_sums_diff, vec![10, 38, 160]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        assert_eq!(coeffs, vec![1, LARGE_PRIME-10, 31, LARGE_PRIME-30]);
+        assert_eq!(coeffs, vec![1, LARGE_PRIME_U32-10, 31, LARGE_PRIME_U32-30]);
     }
 
     #[tokio::test]
@@ -510,9 +511,9 @@ mod test {
         let power_sums_diff = calculate_power_sums(&x, 2).await;
         assert_eq!(power_sums_diff, vec![3987230769, 3419665331]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        let e1 = ((x[0] as i64) + (x[1] as i64)) % LARGE_PRIME;
-        let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME);
-        assert_eq!(coeffs, vec![1, LARGE_PRIME-e1, e2]);
+        let e1 = (((x[0] as i64) + (x[1] as i64)) % LARGE_PRIME) as u32;
+        let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME) as u32;
+        assert_eq!(coeffs, vec![1, LARGE_PRIME_U32-e1, e2]);
     }
 
     #[tokio::test]
@@ -526,7 +527,7 @@ mod test {
             roots.unwrap()
         };
         roots.sort();
-        assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
+        assert_eq!(roots, x.into_iter().map(|x| x).collect::<Vec<_>>());
     }
 
     #[tokio::test]
@@ -540,7 +541,7 @@ mod test {
             roots.unwrap()
         };
         roots.sort();
-        assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
+        assert_eq!(roots, x.into_iter().map(|x| x).collect::<Vec<_>>());
     }
 
     #[tokio::test]
@@ -554,7 +555,7 @@ mod test {
             roots.unwrap()
         };
         roots.sort();
-        assert_eq!(roots, x.into_iter().map(|x| x as i64).collect::<Vec<_>>());
+        assert_eq!(roots, x.into_iter().map(|x| x).collect::<Vec<_>>());
     }
 
     #[test]
