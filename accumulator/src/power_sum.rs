@@ -17,7 +17,8 @@ use itertools::Itertools;
 /// I picked some random prime number in the range [2^32, 2^64] from
 /// https://en.wikipedia.org/wiki/List_of_prime_numbers.
 /// This one is a Thabit prime, which is not of significance.
-const LARGE_PRIME: i64 = 51539607551;
+const LARGE_PRIME: i64 =  4294967029;
+const DJB_MASK: u32 = (1 << 31) - 1;
 
 /// The power sum accumulator stores the power sums of all processed elements
 /// up to the threshold number of lost elements.
@@ -236,7 +237,7 @@ impl Accumulator for PowerSumAccumulator {
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         let mut value: i64 = 1;
-        let elem_u32 = bloom_sd::elem_to_u32(elem) as i64;
+        let elem_u32 = (bloom_sd::elem_to_u32(elem) & DJB_MASK) as i64;
         for i in 0..self.power_sums.len() {
             value = mul_and_mod(value, elem_u32, LARGE_PRIME);
             self.power_sums[i] = (self.power_sums[i] + value) % LARGE_PRIME;
@@ -290,8 +291,9 @@ impl Accumulator for PowerSumAccumulator {
         // Find the difference with the power sums of the processed elements.
         let t1 = Instant::now();
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();
-        let elems_u32: Vec<u32> =
-            elems.iter().map(|elem| bloom_sd::elem_to_u32(elem)).collect();
+        let elems_u32: Vec<u32> = elems.iter()
+            .map(|elem| bloom_sd::elem_to_u32(elem) & DJB_MASK)
+            .collect();
         let power_sums = rt.block_on(async {
             calculate_power_sums(&elems_u32, n_values).await
         });
@@ -340,7 +342,7 @@ impl Accumulator for PowerSumAccumulator {
         let mut digest = Digest::new();
         let mut collisions: HashMap<u32, Vec<Vec<u8>>> = HashMap::new();
         for elem in elems {
-            let elem_u32 = bloom_sd::elem_to_u32(elem);
+            let elem_u32 = bloom_sd::elem_to_u32(elem) & DJB_MASK;
             if !dropped_counts.contains_key(&elem_u32) {
                 // If an element in the log doesn't hash to a u32 root,
                 // it wasn't dropped, so add it to the digest.
@@ -477,10 +479,10 @@ mod test {
     async fn test_calculate_power_sums() {
         assert_eq!(calculate_power_sums(&vec![2, 3, 5], 2).await, vec![10, 38]);
         assert_eq!(calculate_power_sums(&vec![2, 3, 5], 3).await, vec![10, 38, 160]);
-        let one_large_num = calculate_power_sums(&vec![4294967295], 3).await;
-        assert_eq!(one_large_num, vec![4294967295, 8947848534, 17567609286]);
-        let two_large_nums = calculate_power_sums(&vec![4294967295, 2294967295], 3).await;
-        assert_eq!(two_large_nums, vec![6589934590, 32873368637, 30483778854]);
+        let one_large_num = calculate_power_sums(&vec![294967295], 3).await;
+        assert_eq!(one_large_num, vec![294967295, 2507781770, 2201765005]);
+        let two_large_nums = calculate_power_sums(&vec![294967295, 2294967295], 3).await;
+        assert_eq!(two_large_nums, vec![2589934590, 1563208361, 4070406309]);
     }
 
     #[test]
@@ -490,7 +492,7 @@ mod test {
         let diff = calculate_difference(vec![2, 3, 4], &vec![1, 2, 3, 4]);
         assert_eq!(diff, vec![1, 1, 1]);
         let overflow_diff = calculate_difference(vec![1], &vec![2]);
-        assert_eq!(overflow_diff, vec![51539607550]);
+        assert_eq!(overflow_diff, vec![4294967028]);
     }
 
     #[tokio::test]
@@ -499,18 +501,18 @@ mod test {
         let power_sums_diff = calculate_power_sums(&x, 3).await;
         assert_eq!(power_sums_diff, vec![10, 38, 160]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        assert_eq!(coeffs, vec![1, -10+LARGE_PRIME, 31, -30+LARGE_PRIME]);
+        assert_eq!(coeffs, vec![1, LARGE_PRIME-10, 31, LARGE_PRIME-30]);
     }
 
     #[tokio::test]
     async fn test_compute_polynomial_coefficients_large_numbers() {
         let x = vec![4294966796, 3987231002];
         let power_sums_diff = calculate_power_sums(&x, 2).await;
-        assert_eq!(power_sums_diff, vec![8282197798, 20796235250]);
+        assert_eq!(power_sums_diff, vec![3987230769, 3419665331]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        let e1 = (x[0] as i64) + (x[1] as i64) % LARGE_PRIME;
+        let e1 = ((x[0] as i64) + (x[1] as i64)) % LARGE_PRIME;
         let e2 = mul_and_mod(x[0] as i64, x[1] as i64, LARGE_PRIME);
-        assert_eq!(coeffs, vec![1, -e1+LARGE_PRIME, e2]);
+        assert_eq!(coeffs, vec![1, LARGE_PRIME-e1, e2]);
     }
 
     #[tokio::test]
@@ -557,7 +559,7 @@ mod test {
 
     #[test]
     fn test_find_integer_monic_polynomial_roots_no_solution() {
-        let coeffs = vec![1, 47920287469, 12243762544, 39307197049];
+        let coeffs = vec![1, 479202874, 1224376254, 3930719704];
         let roots = find_integer_monic_polynomial_roots(coeffs);
         assert!(roots.is_err());
     }
