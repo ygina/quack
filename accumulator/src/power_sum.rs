@@ -151,10 +151,9 @@ async fn calculate_power_sums(elems: &Vec<u32>, num_psums: usize) -> Vec<u32> {
 }
 
 #[cfg(not(feature = "disable_validation"))]
-fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<u32> {
+fn calculate_difference(lhs: Vec<u32>, rhs: &Vec<u32>) -> Vec<u32> {
     (0..std::cmp::min(lhs.len(), rhs.len()))
-        .map(|i| lhs[i] + LARGE_PRIME - rhs[i])
-        .map(|power_sum| (power_sum % LARGE_PRIME) as u32)
+        .map(|i| add_and_mod(lhs[i], LARGE_PRIME_U32 - rhs[i]))
         .collect()
 }
 
@@ -292,10 +291,11 @@ impl Accumulator for PowerSumAccumulator {
             .collect();
         let power_sums = rt.block_on(async {
             calculate_power_sums(&elems_u32, n_values).await
-        }).into_iter().map(|psum| psum as i64).collect();
+        }).into_iter().collect();
         let t2 = Instant::now();
         debug!("calculated power sums: {:?}", t2 - t1);
-        let power_sums_diff = calculate_difference(power_sums, &self.power_sums);
+        let power_sums_diff = calculate_difference(power_sums, &self.power_sums
+            .iter().map(|x| *x as u32).collect());
         let t3 = Instant::now();
         debug!("calculated power sum difference: {:?}", t3 - t2);
 
