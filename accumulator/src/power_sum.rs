@@ -151,10 +151,10 @@ async fn calculate_power_sums(elems: &Vec<u32>, num_psums: usize) -> Vec<u32> {
 }
 
 #[cfg(not(feature = "disable_validation"))]
-fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
+fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<u32> {
     (0..std::cmp::min(lhs.len(), rhs.len()))
         .map(|i| lhs[i] + LARGE_PRIME - rhs[i])
-        .map(|power_sum| power_sum % LARGE_PRIME)
+        .map(|power_sum| (power_sum % LARGE_PRIME) as u32)
         .collect()
 }
 
@@ -167,19 +167,19 @@ fn calculate_difference(lhs: Vec<i64>, rhs: &Vec<i64>) -> Vec<i64> {
 // ...
 // Returns the coefficients as positive numbers in the field GF(LARGE_PRIME).
 #[cfg(not(feature = "disable_validation"))]
-fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<u32> {
+fn compute_polynomial_coefficients(p: Vec<u32>) -> Vec<u32> {
     let n = p.len();
     if n == 0 {
         return vec![];
     }
     let mut e: Vec<i64> = vec![1];
     for i in 0..n {
-        let mut sum = 0;
+        let mut sum: i64 = 0;
         for j in 0..(i+1) {
             if j & 1 == 0 {
-                sum += mul_and_mod(e[i-j], p[j]);
+                sum += mul_and_mod(e[i-j], p[j] as i64);
             } else {
-                sum -= mul_and_mod(e[i-j], p[j]);
+                sum -= mul_and_mod(e[i-j], p[j] as i64);
             }
         }
         while sum < 0 {
@@ -195,18 +195,6 @@ fn compute_polynomial_coefficients(p: Vec<i64>) -> Vec<u32> {
     }
     // includes the leading coefficient
     e.into_iter().map(|x| x as u32).collect()
-
-    /*
-    let n = p.len();
-    let mut coeffs: Vec<i64> = vec![0; n];
-    unsafe {
-        compute_polynomial_coefficients_wrapper(
-            coeffs.as_mut_ptr(),
-            p.as_ptr(),
-            n,
-        );
-    }
-    */
 }
 
 #[cfg(not(feature = "disable_validation"))]
@@ -505,7 +493,6 @@ mod test {
     async fn test_compute_polynomial_coefficients_small_numbers() {
         let x = vec![2, 3, 5];
         let power_sums_diff = calculate_power_sums(&x, 3).await;
-        let power_sums_diff = power_sums_diff.into_iter().map(|x| x as i64).collect();
         assert_eq!(power_sums_diff, vec![10, 38, 160]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         assert_eq!(coeffs, vec![1, LARGE_PRIME_U32-10, 31, LARGE_PRIME_U32-30]);
@@ -515,7 +502,6 @@ mod test {
     async fn test_compute_polynomial_coefficients_large_numbers() {
         let x = vec![4294966796, 3987231002];
         let power_sums_diff = calculate_power_sums(&x, 2).await;
-        let power_sums_diff = power_sums_diff.into_iter().map(|x| x as i64).collect();
         assert_eq!(power_sums_diff, vec![3987230769, 3419665331]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let e1 = (((x[0] as i64) + (x[1] as i64)) % LARGE_PRIME) as u32;
@@ -527,7 +513,6 @@ mod test {
     async fn test_find_integer_monic_polynomial_roots_small_numbers() {
         let x = vec![2, 3, 5];
         let power_sums_diff = calculate_power_sums(&x, x.len()).await;
-        let power_sums_diff = power_sums_diff.into_iter().map(|x| x as i64).collect();
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let mut roots = {
             let roots = find_integer_monic_polynomial_roots(coeffs);
@@ -542,7 +527,6 @@ mod test {
     async fn test_find_integer_monic_polynomial_roots_large_numbers() {
         let x = vec![3987231002, 4294966796];
         let power_sums_diff = calculate_power_sums(&x, x.len()).await;
-        let power_sums_diff = power_sums_diff.into_iter().map(|x| x as i64).collect();
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let mut roots = {
             let roots = find_integer_monic_polynomial_roots(coeffs);
@@ -557,7 +541,6 @@ mod test {
     async fn test_find_integer_monic_polynomial_roots_multiplicity() {
         let x = vec![3987231002, 4294966796, 4294966796, 4294966796];
         let power_sums_diff = calculate_power_sums(&x, x.len()).await;
-        let power_sums_diff = power_sums_diff.into_iter().map(|x| x as i64).collect();
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
         let mut roots = {
             let roots = find_integer_monic_polynomial_roots(coeffs);
