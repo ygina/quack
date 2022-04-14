@@ -20,7 +20,6 @@ use itertools::Itertools;
 const LARGE_PRIME: i64 =  4294967029;
 const LARGE_PRIME_U32: u32 =  4294967029;
 const LARGE_PRIME_U64: u64 =  4294967029;
-const LARGE_PRIME_I128: i128 =  4294967029;
 const DJB_MASK: u32 = (1 << 31) - 1;
 
 /// The power sum accumulator stores the power sums of all processed elements
@@ -40,7 +39,7 @@ const DJB_MASK: u32 = (1 << 31) - 1;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PowerSumAccumulator {
     digest: Digest,
-    power_sums: Vec<i64>,
+    power_sums: Vec<u32>,
 }
 
 #[cfg(not(feature = "disable_validation"))]
@@ -58,8 +57,8 @@ fn add_and_mod(a: u32, b: u32) -> u32 {
     (((a as u64) + (b as u64)) % LARGE_PRIME_U64) as u32
 }
 
-fn mul_and_mod(a: i64, b: i64) -> i64 {
-    (((a as i128) * (b as i128)) % LARGE_PRIME_I128) as i64
+fn mul_and_mod(a: u32, b: u32) -> u32 {
+    (((a as u64) * (b as u64)) % LARGE_PRIME_U64) as u32
 }
 
 // modular division
@@ -85,8 +84,9 @@ fn div_and_mod(a: u32, b: u32) -> u32 {
     };
     a /= gcd;
     b /= gcd;
+    a %= LARGE_PRIME;
     if b == 1 {
-        return (a % LARGE_PRIME) as u32;
+        return a as u32;
     }
 
     // find the modular multiplicative inverse of b mod modulo
@@ -105,11 +105,11 @@ fn div_and_mod(a: u32, b: u32) -> u32 {
         while mmi < 0 {
             mmi += LARGE_PRIME;
         }
-        mmi
+        mmi % LARGE_PRIME
     };
 
     // return the divided `a` value multiplied by the MMI in the field
-    mul_and_mod(a, mmi) as u32
+    mul_and_mod(a as u32, mmi as u32)
 }
 
 #[cfg(not(feature = "disable_validation"))]
@@ -131,7 +131,7 @@ async fn calculate_power_sums(elems: &Vec<u32>, num_psums: usize) -> Vec<u32> {
             for i in 0..elems.len() {
                 let mut value: u32 = 1;
                 for j in 0..power_sums.len() {
-                    value = mul_and_mod(value as i64, elems[i] as i64) as u32;
+                    value = mul_and_mod(value, elems[i]);
                     power_sums[j] = add_and_mod(power_sums[j], value);
                 }
             }
@@ -176,9 +176,9 @@ fn compute_polynomial_coefficients(p: Vec<u32>) -> Vec<u32> {
         let mut sum: i64 = 0;
         for j in 0..(i+1) {
             if j & 1 == 0 {
-                sum += mul_and_mod(e[i-j], p[j] as i64);
+                sum += mul_and_mod(e[i-j] as u32, p[j]) as i64;
             } else {
-                sum -= mul_and_mod(e[i-j], p[j] as i64);
+                sum -= mul_and_mod(e[i-j] as u32, p[j]) as i64;
             }
         }
         while sum < 0 {
@@ -231,11 +231,11 @@ impl Accumulator for PowerSumAccumulator {
 
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
-        let mut value: i64 = 1;
-        let elem_u32 = (bloom_sd::elem_to_u32(elem) & DJB_MASK) as i64;
+        let mut value: u32 = 1;
+        let elem_u32 = bloom_sd::elem_to_u32(elem) & DJB_MASK;
         for i in 0..self.power_sums.len() {
             value = mul_and_mod(value, elem_u32);
-            self.power_sums[i] = (self.power_sums[i] + value) % LARGE_PRIME;
+            self.power_sums[i] = add_and_mod(self.power_sums[i], value);
         }
     }
 
@@ -504,8 +504,8 @@ mod test {
         let power_sums_diff = calculate_power_sums(&x, 2).await;
         assert_eq!(power_sums_diff, vec![3987230769, 3419665331]);
         let coeffs = compute_polynomial_coefficients(power_sums_diff);
-        let e1 = (((x[0] as i64) + (x[1] as i64)) % LARGE_PRIME) as u32;
-        let e2 = mul_and_mod(x[0] as i64, x[1] as i64) as u32;
+        let e1 = add_and_mod(x[0], x[1]);
+        let e2 = mul_and_mod(x[0], x[1]);
         assert_eq!(coeffs, vec![1, LARGE_PRIME_U32-e1, e2]);
     }
 
