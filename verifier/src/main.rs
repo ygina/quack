@@ -2,12 +2,11 @@
 #[macro_use]
 extern crate log;
 
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::net::TcpStream;
-use std::io::Read;
+use std::io::{Read, Write, Cursor};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::io::Cursor;
 
 use hex;
 use bincode;
@@ -17,7 +16,7 @@ use accumulator::*;
 
 use pcap_parser::*;
 // use pcap_parser::traits::PcapReaderIterator;
-// use std::fs::File;
+use std::fs::File;
 
 /// Connect to the SSH server and assert the session is authenticated.
 fn establish_ssh_session(
@@ -69,6 +68,13 @@ fn get_accumulator(
     };
     info!("accumulator size = {} bytes", buf.len());
     info!("accumulator type = {}", ty);
+
+    let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let path = format!("results/digests/{}.digest", time);
+    let mut f = File::create(&path).unwrap();
+    f.write_all(&buf[..]).unwrap();
+    f.flush().unwrap();
+    debug!("saving digest in {}", path);
     match ty {
         "naive" => Box::new(bincode::deserialize::<NaiveAccumulator>(&buf).unwrap()),
         "cbf" => Box::new(bincode::deserialize::<CBFAccumulator>(&buf).unwrap()),
