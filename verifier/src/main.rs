@@ -1,3 +1,4 @@
+#![feature(exit_status_error)]
 #[macro_use]
 extern crate log;
 
@@ -88,29 +89,30 @@ fn get_router_logs(
     nbytes: usize,
     drop: Option<usize>
 ) -> Vec<Vec<u8>> {
+    let t = Instant::now();
     let data: Vec<u8> = if let Some(ssh) = ssh {
-        let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
-        let (mut f, stat) = sess.scp_recv(Path::new(filename)).unwrap();
-        debug!("remote file size ({}): {}", filename, stat.size());
-        let mut data: Vec<u8> = Vec::new();
-        f.read_to_end(&mut data).unwrap();
-
-        // Close the channel and wait for the whole content to be tranferred
-        f.send_eof().unwrap();
-        f.wait_eof().unwrap();
-        f.close().unwrap();
-        f.wait_close().unwrap();
-        data
+        let remote_path = format!("{}@{}:{}", ssh[1], ssh[0], filename);
+        let local_path = Path::new(filename).file_name().unwrap();
+        std::process::Command::new("rsync")
+            .arg(&remote_path)
+            .arg(local_path)
+            .arg("--append")
+            .spawn().unwrap()
+            .wait().unwrap()
+            .exit_ok().unwrap();
+        debug!("rsynced logs from {}: {:?}", remote_path, Instant::now() - t);
+        std::fs::read(local_path).unwrap()
     } else {
         if !std::path::Path::new(filename).exists() {
             panic!("file does not exist: {}", filename);
         }
-        debug!("reading router logs from {}", filename);
+        debug!("reading local logs from {}", filename);
         std::fs::read(filename).unwrap()
     };
+    debug!("loaded local file: {:?}", Instant::now() - t);
 
     // https://docs.rs/pcap-parser/latest/pcap_parser/struct.PcapNGReader.html
-    debug!("parsing pcap format {} bytes", data.len());
+    info!("parsing router logs: {} bytes", data.len());
     let mut reader = create_reader(65536, Cursor::new(data)).unwrap();
     let mut res = Vec::new();
     let mut maybe_truncated = false;
@@ -150,7 +152,7 @@ fn get_router_logs(
             Err(e) => error!("error while reading: {:?}", e),
         }
     }
-    debug!("parsed {} packets", res.len());
+    debug!("parsed {} packets: {:?}", res.len(), Instant::now() - t);
     if let Some(drop) = drop {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -287,7 +289,7 @@ fn check_truncation(
 }
 
 fn main() {
-    env_logger::builder().filter_level(log::LevelFilter::Info).init();
+    env_logger::builder().filter_level(log::LevelFilter::Debug).init();
 
     let matches = Command::new("verifier")
         .arg(Arg::new("check-acc-logs")
@@ -323,7 +325,7 @@ fn main() {
             .takes_value(true))
         .arg(Arg::new("router-ssh")
             .help("Address of the router to SSH into (if not local) i.e. \
-                `openwrt.lan:22`, the username, and the path to the private \
+                `openwrt.lan`, the username, and the path to the private \
                 key file.")
             .long("router-ssh")
             .takes_value(true)
@@ -332,7 +334,7 @@ fn main() {
             .value_names(&["address", "username", "private_key_file"]))
         .arg(Arg::new("accumulator-ssh")
             .help("Address of the accumulator to SSH into (if not local) i.e. \
-                `openwrt.lan:22`, the username, and the path to the private \
+                `openwrt.lan`, the username, and the path to the private \
                 key file.")
             .long("accumulator-ssh")
             .takes_value(true)
@@ -400,6 +402,7 @@ fn main() {
         info!("TOTAL VERIFICATION TIME: {:?}", t4 - t1);
 
         if valid {
+            env_logger::builder().filter_level(log::LevelFilter::Info).init();
             let num_truncated = check_truncation(accumulator, &router_logs);
             let t5 = Instant::now();
             info!("truncated {}/{} packets: {:?}", num_truncated,
