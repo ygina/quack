@@ -60,7 +60,7 @@ async fn pcap_listen(
     let mut child = {
         let tcpdump = Command::new("tcpdump")
             .arg("-B")
-            .arg("16")
+            .arg("1024")
             .arg("-i")
             .arg("eth1")
             .arg("-Q")
