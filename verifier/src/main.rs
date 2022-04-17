@@ -103,7 +103,6 @@ fn get_router_logs(
         std::process::Command::new("rsync")
             .arg(&remote_path)
             .arg(local_path)
-            .arg("--append")
             .spawn().unwrap()
             .wait().unwrap()
             .exit_ok().unwrap();
@@ -131,14 +130,14 @@ fn get_router_logs(
                     PcapBlockOwned::Legacy(block) => {
                         if pkts_to_skip != 0 {
                             pkts_to_skip -= 1;
-                            continue;
+                        } else {
+                            let hi = std::cmp::min(14 + nbytes, block.data.len());
+                            let mut elem = block.data[14..hi].to_vec();
+                            if elem.len() < nbytes {
+                                elem.append(&mut vec![0; nbytes - elem.len()]);
+                            }
+                            res.push(elem);
                         }
-                        let hi = std::cmp::min(14 + nbytes, block.data.len());
-                        let mut elem = block.data[14..hi].to_vec();
-                        if elem.len() < nbytes {
-                            elem.append(&mut vec![0; nbytes - elem.len()]);
-                        }
-                        res.push(elem);
                     },
                     PcapBlockOwned::NG(block) => {
                         debug!("ignoring NG({:?}) offset={}", block, offset);
