@@ -59,7 +59,8 @@ async fn pcap_listen(
     use std::process::{Command, Stdio};
     let mut child = {
         let tcpdump = Command::new("tcpdump")
-            .arg("--immediate-mode")
+            .arg("-B")
+            .arg("16")
             .arg("-i")
             .arg("eth1")
             .arg("-Q")
@@ -114,7 +115,7 @@ async fn pcap_listen(
                         n += 1;
                         trace!("processed {} packets block {:?} offset={}", n, block.data, offset);
                         if n % 1000 == 0 {
-                            debug!("processed {} packets", n);
+                            trace!("processed {} packets", n);
                         }
                     },
                     PcapBlockOwned::NG(block) => {
