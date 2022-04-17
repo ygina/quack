@@ -26,7 +26,7 @@ fn establish_ssh_session(
     private_key_file: &str,
 ) -> Session {
     debug!("establishing ssh connection to {}", addr);
-    let tcp = TcpStream::connect(addr).unwrap();
+    let tcp = TcpStream::connect(format!("{}:22", addr)).unwrap();
     let mut sess = Session::new().unwrap();
     sess.set_tcp_stream(tcp);
     sess.handshake().unwrap();
@@ -308,14 +308,14 @@ fn main() {
             .short('f')
             .long("filename")
             .takes_value(true)
-            .default_value("router.pcap"))
+            .default_value("/mnt/sda1/router.pcap"))
         .arg(Arg::new("bytes")
             .help("Number of bytes recorded from each packet. Default is \
-                128 bits = 16 bytes.")
+                40 bytes, enough to capture an IPv6 header.")
             .short('b')
             .long("bytes")
             .takes_value(true)
-            .default_value("16"))
+            .default_value("40"))
         .arg(Arg::new("drop")
             .help("Purposefully drop this number of packets to mimic \
                 malicious packets that were not logged, hoping they were \
@@ -326,7 +326,7 @@ fn main() {
         .arg(Arg::new("router-ssh")
             .help("Address of the router to SSH into (if not local) i.e. \
                 `openwrt.lan`, the username, and the path to the private \
-                key file.")
+                key file. Assumes port 22.")
             .long("router-ssh")
             .takes_value(true)
             .multiple_values(true)
@@ -335,7 +335,7 @@ fn main() {
         .arg(Arg::new("accumulator-ssh")
             .help("Address of the accumulator to SSH into (if not local) i.e. \
                 `openwrt.lan`, the username, and the path to the private \
-                key file.")
+                key file. Assumes port 22.")
             .long("accumulator-ssh")
             .takes_value(true)
             .multiple_values(true)

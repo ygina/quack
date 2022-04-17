@@ -178,18 +178,18 @@ async fn main() {
             .default_value("7878"))
         .arg(Arg::new("bytes")
             .help("Number of bytes to record from each packet. Default is \
-                128 bits = 16 bytes.")
+                40 bytes, enough to capture an IPv6 header.")
             .short('b')
             .long("bytes")
             .takes_value(true)
-            .default_value("16"))
+            .default_value("40"))
         .arg(Arg::new("threshold")
-            .help("Threshold number of log packets for the CBF \
+            .help("Threshold number of log packets for the IBLT \
                 and power sum accumulators.")
             .short('t')
             .long("threshold")
             .takes_value(true)
-            .default_value("1000"))
+            .default_value("10000"))
         .arg(Arg::new("accumulator")
             .help("")
             .short('a')
