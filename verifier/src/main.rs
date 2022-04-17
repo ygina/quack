@@ -279,7 +279,7 @@ fn check_acc_logs(
 /// a subset, assuming validation passed initially. Returns the number of
 /// packets one can truncate while still being a superset of the digest.
 fn check_truncation(
-    accumulator: Box<dyn Accumulator>,
+    accumulator: &Box<dyn Accumulator>,
     logs: &Vec<Vec<u8>>,
 ) -> usize {
     let mut lo = 0;
@@ -395,8 +395,9 @@ fn main() {
         );
         let t2 = Instant::now();
         info!("get_accumulator: {:?}", t2 - t1);
+        let start_index = matches.value_of("index").unwrap().parse().unwrap();
         let router_logs = get_router_logs(
-            matches.value_of("index").unwrap().parse().unwrap(),
+            start_index,
             router_ssh,
             filename,
             bytes,
@@ -418,10 +419,13 @@ fn main() {
 
         if valid {
             env_logger::builder().filter_level(log::LevelFilter::Info).init();
-            let num_truncated = check_truncation(accumulator, &router_logs);
+            let num_truncated = check_truncation(&accumulator, &router_logs);
             let t5 = Instant::now();
             info!("truncated {}/{} packets: {:?}", num_truncated,
                 router_logs.len(), t5 - t4);
+            info!("next start index would be {}, or {} if conservative",
+                start_index + router_logs.len() - num_truncated,
+                start_index + accumulator.total());
         }
     }
 }
