@@ -211,7 +211,7 @@ fn solve_ilp_for_iblt(
         .map(|count| count.try_into().unwrap())
         .collect();
     assert!(n_dropped_remaining <= elems_i.len());
-    info!("setup system of {} eqs in {} vars (expect sols to sum to {})",
+    debug!("setup system of {} eqs in {} vars (expect sols to sum to {})",
         elems_i.len(),
         counters.len(),
         n_dropped_remaining);
@@ -339,7 +339,7 @@ impl Accumulator for IBLTAccumulator {
             }
         };
         let t2 = Instant::now();
-        info!("calculated the difference iblt: {:?}", t2 - t1);
+        debug!("calculated the difference iblt: {:?}", t2 - t1);
 
         // Remove any elements that are definitely dropped based on counters
         // in the IBLT that are set to 1. Then find the remaining list of
@@ -347,7 +347,7 @@ impl Accumulator for IBLTAccumulator {
         // not 0. If elements are not unique, the ILP can find _a_ solution.
         let removed = iblt.eliminate_elems();
         let t3 = Instant::now();
-        info!("eliminated {}/{} elements using the iblt: {:?}",
+        debug!("eliminated {}/{} elements using the iblt: {:?}",
             removed.len(), n_dropped, t3 - t2);
 
         // The remaining maybe dropped elements should make up any non-zero
@@ -381,7 +381,7 @@ impl Accumulator for IBLTAccumulator {
             return false;
         };
         let t4 = Instant::now();
-        info!("solved ILP: {:?}", t4 - t3);
+        debug!("solved ILP: {:?}", t4 - t3);
 
         // Right now we have:
         // * `removed` - the djb hash of elems that were definitely dropped

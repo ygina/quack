@@ -424,11 +424,14 @@ fn main() {
         info!("TOTAL VERIFICATION TIME: {:?}", t4 - t1);
 
         if valid {
-            env_logger::builder().filter_level(log::LevelFilter::Info).init();
             let num_truncated = check_truncation(&accumulator, &router_logs);
             let t5 = Instant::now();
             info!("truncated {}/{} packets: {:?}", num_truncated,
                 router_logs.len(), t5 - t4);
+            let num_dropped = router_logs.len() - accumulator.total() -
+                num_truncated;
+            info!("probably dropped {} packets", num_dropped);
+            info!("received {} packets", accumulator.total());
             info!("next start index would be {}, or {} if conservative",
                 start_index + router_logs.len() - num_truncated,
                 start_index + accumulator.total());
