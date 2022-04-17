@@ -160,6 +160,7 @@ fn check_digest_from_removed_set(
 
     // Try every combination of remaining elements with one removed per slot,
     // and if any of them produce a matching digest, accept.
+    let t1 = Instant::now();
     for (n_digests, combination) in
             combinations.into_iter().multi_cartesian_product().enumerate() {
         let mut digest = digest.clone();
@@ -168,7 +169,11 @@ fn check_digest_from_removed_set(
         }
         assert_eq!(digest.count, expected_digest.count);
         if digest.equals(&expected_digest) {
-            debug!("found matching digest after checking {} digests", n_digests);
+            debug!(
+                "found matching digest after checking {} digests: {:?}",
+                n_digests,
+                Instant::now() - t1,
+            );
             return true;
         }
     }
