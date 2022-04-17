@@ -34,7 +34,6 @@ extern "C" {
 #[derive(Serialize, Deserialize)]
 pub struct CBFAccumulator {
     digest: Digest,
-    num_elems: usize,
     cbf: CountingBloomFilter,
 }
 
@@ -46,7 +45,6 @@ impl CBFAccumulator {
     pub fn new(threshold: usize) -> Self {
         Self {
             digest: Digest::new(),
-            num_elems: 0,
             cbf: CountingBloomFilter::with_rate(
                 BITS_PER_ENTRY,
                 FALSE_POSITIVE_RATE,
@@ -57,7 +55,6 @@ impl CBFAccumulator {
 
     pub fn equals(&self, other: &Self) -> bool {
         self.digest == other.digest
-            && self.num_elems == other.num_elems
             && self.cbf.equals(&other.cbf)
     }
 }
@@ -67,9 +64,13 @@ impl Accumulator for CBFAccumulator {
         bincode::serialize(self).unwrap()
     }
 
+    fn reset(&mut self) {
+        self.digest = Digest::new();
+        self.cbf = self.cbf.empty_clone();
+    }
+
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
-        self.num_elems += 1;
         self.cbf.insert(&elem);
     }
 
@@ -80,7 +81,7 @@ impl Accumulator for CBFAccumulator {
     }
 
     fn total(&self) -> usize {
-        self.num_elems
+        self.digest.count as _
     }
 
     #[cfg(feature = "disable_validation")]

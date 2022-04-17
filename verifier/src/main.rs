@@ -84,6 +84,7 @@ fn get_accumulator(
 /// - `nbytes`: number of bytes per packet
 /// TODO: SFTP logs from router.
 fn get_router_logs(
+    mut pkts_to_skip: usize,
     ssh: Option<Vec<&str>>,
     filename: &str,
     nbytes: usize,
@@ -122,6 +123,10 @@ fn get_router_logs(
                 maybe_truncated = false;
                 match block {
                     PcapBlockOwned::Legacy(block) => {
+                        if pkts_to_skip != 0 {
+                            pkts_to_skip -= 1;
+                            continue;
+                        }
                         let hi = std::cmp::min(14 + nbytes, block.data.len());
                         let mut elem = block.data[14..hi].to_vec();
                         if elem.len() < nbytes {
@@ -254,13 +259,15 @@ fn check_acc_logs(
     bytes: usize,
 ) {
     info!("router logs:");
-    let router_logs = get_router_logs(router_ssh, router_filename, bytes, drop);
+    let router_logs = get_router_logs(
+        0, router_ssh, router_filename, bytes, drop);
     let router_logs_map = to_map(&router_logs);
     for i in 0..std::cmp::min(10, router_logs.len()) {
         println!("0x{}", hex::encode(&router_logs[i]));
     }
     info!("accumulator logs:");
-    let accumulator_logs = get_router_logs(acc_ssh, acc_filename, bytes, None);
+    let accumulator_logs = get_router_logs(
+        0, acc_ssh, acc_filename, bytes, None);
     let accumulator_logs_map = to_map(&accumulator_logs);
     for i in 0..std::cmp::min(10, accumulator_logs.len()) {
         println!("0x{}", hex::encode(&accumulator_logs[i]));
@@ -309,6 +316,13 @@ fn main() {
             .long("filename")
             .takes_value(true)
             .default_value("/mnt/sda1/router.pcap"))
+        .arg(Arg::new("index")
+            .help("Index of the log to start considering from, used when \
+                the log is truncated in a previous iteration.")
+            .short('i')
+            .long("index")
+            .takes_value(true)
+            .default_value("0"))
         .arg(Arg::new("bytes")
             .help("Number of bytes recorded from each packet. Default is \
                 40 bytes, enough to capture an IPv6 header.")
@@ -382,6 +396,7 @@ fn main() {
         let t2 = Instant::now();
         info!("get_accumulator: {:?}", t2 - t1);
         let router_logs = get_router_logs(
+            matches.value_of("index").unwrap().parse().unwrap(),
             router_ssh,
             filename,
             bytes,

@@ -34,6 +34,10 @@ impl Accumulator for NaiveAccumulator {
         bincode::serialize(self).unwrap()
     }
 
+    fn reset(&mut self) {
+        self.digest = Digest::new();
+    }
+
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
     }

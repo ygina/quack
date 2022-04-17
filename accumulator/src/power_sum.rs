@@ -229,6 +229,11 @@ impl Accumulator for PowerSumAccumulator {
         bincode::serialize(self).unwrap()
     }
 
+    fn reset(&mut self) {
+        self.digest = Digest::new();
+        self.power_sums = vec![0; self.power_sums.len()];
+    }
+
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         let mut value: u32 = 1;

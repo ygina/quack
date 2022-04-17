@@ -14,6 +14,8 @@ impl Accumulator for MockAccumulator {
     fn to_bytes(&self) -> Vec<u8> {
         unimplemented!()
     }
+    fn reset(&mut self) {
+    }
     fn process(&mut self, _elem: &[u8]) {
     }
     fn process_batch(&mut self, _elems: &Vec<Vec<u8>>) {

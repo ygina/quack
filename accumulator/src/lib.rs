@@ -19,6 +19,8 @@ pub use power_sum::PowerSumAccumulator;
 pub trait Accumulator {
     /// Serialize the accumulator to bytes.
     fn to_bytes(&self) -> Vec<u8>;
+    /// Resets the accumulator to its initial state.
+    fn reset(&mut self);
     /// Process a single element.
     fn process(&mut self, elem: &[u8]);
     /// Process a batch of elements.

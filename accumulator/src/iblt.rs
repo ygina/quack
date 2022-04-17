@@ -287,6 +287,11 @@ impl Accumulator for IBLTAccumulator {
         bincode::serialize(self).unwrap()
     }
 
+    fn reset(&mut self) {
+        self.digest = Digest::new();
+        self.iblt = self.iblt.empty_clone();
+    }
+
     fn process(&mut self, elem: &[u8]) {
         self.digest.add(elem);
         self.iblt.insert(elem);
