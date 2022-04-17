@@ -266,8 +266,28 @@ fn check_acc_logs(
     compare_maps(router_logs_map, accumulator_logs_map);
 }
 
+/// Attempts to truncate as much of the log as possible such that it is still
+/// a subset, assuming validation passed initially. Returns the number of
+/// packets one can truncate while still being a superset of the digest.
+fn check_truncation(
+    accumulator: Box<dyn Accumulator>,
+    logs: &Vec<Vec<u8>>,
+) -> usize {
+    let mut lo = 0;
+    let mut hi = logs.len() - accumulator.total();
+    while lo != hi {
+        let mid = (lo + hi) / 2;
+        if accumulator.validate(&logs[..logs.len() - mid].to_vec()) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    lo
+}
+
 fn main() {
-    env_logger::builder().filter_level(log::LevelFilter::Debug).init();
+    env_logger::builder().filter_level(log::LevelFilter::Info).init();
 
     let matches = Command::new("verifier")
         .arg(Arg::new("check-acc-logs")
@@ -369,7 +389,8 @@ fn main() {
         info!("get_router_logs: {:?}", t3 - t2);
         info!("{}/{} packets received", accumulator.total(), router_logs.len());
         assert!(accumulator.total() <= router_logs.len());
-        if accumulator.validate(&router_logs) {
+        let valid = accumulator.validate(&router_logs);
+        if valid {
             info!("valid router");
         } else {
             warn!("invalid router");
@@ -377,5 +398,12 @@ fn main() {
         let t4 = Instant::now();
         info!("validation: {:?}", t4 - t3);
         info!("TOTAL VERIFICATION TIME: {:?}", t4 - t1);
+
+        if valid {
+            let num_truncated = check_truncation(accumulator, &router_logs);
+            let t5 = Instant::now();
+            info!("truncated {}/{} packets: {:?}", num_truncated,
+                router_logs.len(), t5 - t4);
+        }
     }
 }
