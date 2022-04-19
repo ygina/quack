@@ -3,7 +3,7 @@ extern crate log;
 
 use std::fs::{OpenOptions, File};
 use std::net::TcpListener;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use clap::{Arg, Command};
@@ -139,7 +139,6 @@ async fn pcap_listen(
 }
 
 async fn tcp_listen(
-    reset: bool,
     accumulator: Arc<Mutex<Box<dyn Accumulator + Send>>>,
     port: u32,
 ) {
@@ -147,9 +146,12 @@ async fn tcp_listen(
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
+        let mut reset = [0; 1];
+        stream.read(&mut reset).unwrap();
         let mut accumulator = accumulator.lock().unwrap();
         let bytes = accumulator.to_bytes();
-        if reset {
+        info!("reset byte = {}", reset[0]);
+        if reset[0] != 0 {
             accumulator.reset();
         }
         drop(accumulator);
@@ -194,10 +196,6 @@ async fn main() {
             .long("threshold")
             .takes_value(true)
             .default_value("10000"))
-        .arg(Arg::new("reset")
-            .help("If the flag is set, resets the digest each time it is \
-                serialized.")
-            .long("reset"))
         .arg(Arg::new("accumulator")
             .help("")
             .short('a')
@@ -213,7 +211,6 @@ async fn main() {
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let port: u32 = matches.value_of("port").unwrap().parse().unwrap();
     let log = matches.value_of("log");
-    let reset = matches.is_present("reset");
     let accumulator: Box<dyn Accumulator + Send> = {
         let threshold: usize = matches.value_of("threshold").unwrap()
             .parse().unwrap();
@@ -228,7 +225,7 @@ async fn main() {
     let lock = Arc::new(Mutex::new(accumulator));
     let lock_clone = Arc::clone(&lock);
     let join = tokio::spawn(async move {
-        tcp_listen(reset, lock_clone, port).await;
+        tcp_listen(lock_clone, port).await;
     });
     if matches.is_present("mock") {
         pcap_listen_mock(log, bytes, lock).await;
