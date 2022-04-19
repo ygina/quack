@@ -54,9 +54,9 @@ fn get_accumulator(
         let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
         let mut channel = sess.channel_session().unwrap();
         let cmd = if reset {
-            format!("echo -e '\\x01' | nc -v 127.0.0.1 {}", port)
+            format!("echo -n -e '\\x01' | nc -v 127.0.0.1 {}", port)
         } else {
-            format!("echo -e '\\x00' | nc -v 127.0.0.1 {}", port)
+            format!("echo -n -e '\\x00' | nc -v 127.0.0.1 {}", port)
         };
         channel.exec(&cmd).unwrap();
         channel.read_to_end(&mut buf).unwrap();
