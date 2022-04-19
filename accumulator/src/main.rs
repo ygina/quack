@@ -156,7 +156,7 @@ async fn tcp_listen(
         }
         drop(accumulator);
         info!("sending {} bytes to {:?}", bytes.len(), stream.peer_addr());
-        stream.write(&bytes).unwrap();
+        stream.write_all(&bytes).unwrap();
         stream.flush().unwrap();
     }
 }
