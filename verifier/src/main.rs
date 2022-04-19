@@ -45,6 +45,7 @@ fn establish_ssh_session(
 /// the TCP port shouldn't be externally exposed.
 fn get_accumulator(
     ssh: Option<Vec<&str>>,
+    reset: bool,
     port: u32,
     ty: &str,
 ) -> Box<dyn Accumulator> {
@@ -52,7 +53,11 @@ fn get_accumulator(
     if let Some(ssh) = ssh {
         let sess = establish_ssh_session(ssh[0], ssh[1], ssh[2]);
         let mut channel = sess.channel_session().unwrap();
-        let cmd = format!("cat /dev/null | nc -v 127.0.0.1 {}", port);
+        let cmd = if reset {
+            format!("echo -e '\\x01' | nc -v 127.0.0.1 {}", port)
+        } else {
+            format!("echo -e '\\x00' | nc -v 127.0.0.1 {}", port)
+        };
         channel.exec(&cmd).unwrap();
         channel.read_to_end(&mut buf).unwrap();
         channel.wait_close().unwrap();
@@ -342,6 +347,10 @@ fn main() {
             .short('d')
             .long("drop")
             .takes_value(true))
+        .arg(Arg::new("reset")
+            .help("If the flag is set, resets the digest each time it is \
+                serialized.")
+            .long("reset"))
         .arg(Arg::new("router-ssh")
             .help("Address of the router to SSH into (if not local) i.e. \
                 `openwrt.lan`, the username, and the path to the private \
@@ -376,6 +385,7 @@ fn main() {
     let filename = matches.value_of("filename").unwrap();
     let bytes: usize = matches.value_of("bytes").unwrap().parse().unwrap();
     let accumulator_type = matches.value_of("accumulator").unwrap();
+    let reset = matches.is_present("reset");
     let accumulator_ssh = matches.values_of("accumulator-ssh").map(|ssh|
        ssh.collect());
     let router_ssh = matches.values_of("router-ssh").map(|ssh| ssh.collect());
@@ -395,6 +405,7 @@ fn main() {
         let t1 = Instant::now();
         let accumulator = get_accumulator(
             accumulator_ssh,
+            reset,
             port,
             accumulator_type,
         );
