@@ -124,12 +124,17 @@ fn main() {
     let threshold: usize = matches.value_of("threshold").unwrap()
         .parse().unwrap();
 
-    let results: Vec<_> = (0..trials)
-        .map(|_| {
-            let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
-            let acc = build_accumulator(&mut g, accumulator_ty, threshold);
-            validate(acc, &g.log, malicious).unwrap()
-        })
-        .collect();
-    info!("median\t{}\t{}\t{:?}", num_logged, p_dropped, median(results));
+    let mut results = vec![];
+    let mut errors = 0;
+    for _ in 0..trials {
+        let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
+        let acc = build_accumulator(&mut g, accumulator_ty, threshold);
+        if let Ok(result) = validate(acc, &g.log, malicious) {
+            results.push(result);
+        } else {
+            errors += 1;
+        }
+    }
+    info!("errors\tlogged\tp_drop\tmedian");
+    info!("{}\t{}\t{}\t{:?}", errors, num_logged, p_dropped, median(results));
 }
