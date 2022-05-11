@@ -3,7 +3,6 @@ use std::hash::Hasher;
 use std::num::Wrapping;
 
 use rand;
-use rand::Rng;
 use serde::{Serialize, Deserialize};
 use djb_hash::{HasherU32, x33a_u32::*};
 use siphasher::sip128::SipHasher13;
@@ -19,6 +18,7 @@ pub struct InvBloomLookupTable {
     data: Vec<u32>,
     num_entries: u64,
     num_hashes: u32,
+    seed: u64,
     #[serde(with = "SipHasher13Def")]
     hash_builder_one: SipHasher13,
     #[serde(with = "SipHasher13Def")]
@@ -33,31 +33,39 @@ pub fn elem_to_u32(elem: &[u8]) -> u32 {
 }
 
 impl InvBloomLookupTable {
-    /// Creates a InvBloomLookupTable that uses `bits_per_entry` bits for
-    /// each entry and expects to hold `expected_num_items`. The filter
-    /// will be sized to have a false positive rate of the value specified
-    /// in `rate`.
-    pub fn with_rate(
+    /// Creates a InvBloomLookupTable that uses `bits_per_entry` bits for each
+    /// entry, `num_entries` number of entries, and `num_hashes` number of hash
+    /// functions.
+    ///
+    /// The recommended parameters are 10x entries the number of expected items,
+    /// and 2 hash functions. These were experimentally found to provide the
+    /// best tradeoff between space and false positive rates (stating the
+    /// router is malicious when it is not).
+    pub fn new(
         bits_per_entry: usize,
-        _rate: f32,
-        expected_num_items: u32,
+        num_entries: usize,
+        num_hashes: u32,
     ) -> Self {
-        // TODO: determine number of entries and hashes from IBLT paper
-        // let num_entries = bloom::bloom::needed_bits(rate, expected_num_items);
-        // let num_hashes = bloom::bloom::optimal_num_hashes(
-        //     bits_per_entry,
-        //     expected_num_items,
-        // );
-        let num_hashes = 2;
-        // 4 is a multiplier that is experimentally found to reduce the number
-        // of false positives (stating the router is malicious when it is not)
-        let num_entries = 10 * expected_num_items as usize;
-        let mut rng = rand::thread_rng();
+        use rand::RngCore;
+        let seed = rand::rngs::OsRng.next_u64();
+        Self::new_with_seed(seed, bits_per_entry, num_entries, num_hashes)
+    }
+
+    /// Like `new()`, but seeds the hash builders.
+    pub fn new_with_seed(
+        seed: u64,
+        bits_per_entry: usize,
+        num_entries: usize,
+        num_hashes: u32,
+    ) -> Self {
+        use rand::{SeedableRng, rngs::SmallRng, Rng};
+        let mut rng = SmallRng::seed_from_u64(seed);
         InvBloomLookupTable {
             data: vec![0; num_entries],
             counters: ValueVec::new(bits_per_entry, num_entries),
             num_entries: num_entries as u64,
             num_hashes,
+            seed,
             hash_builder_one: SipHasher13::new_with_keys(rng.gen(), rng.gen()),
             hash_builder_two: SipHasher13::new_with_keys(rng.gen(), rng.gen()),
         }
@@ -71,6 +79,7 @@ impl InvBloomLookupTable {
             counters: ValueVec::new(bits_per_entry, self.num_entries as usize),
             num_entries: self.num_entries,
             num_hashes: self.num_hashes,
+            seed: self.seed,
             hash_builder_one: self.hash_builder_one.clone(),
             hash_builder_two: self.hash_builder_two.clone(),
         }
@@ -200,7 +209,7 @@ impl InvBloomLookupTable {
 
     /// Enumerates as many items as possible in the IBLT and removes them.
     /// Returns the removed items. Note removed elements must be unique
-    /// unless the IBLT uses an accumulator function that is not an XOR.
+    /// because the corresponding counters would be at least 2.
     /// The caller will need to map elements to u32.
     pub fn eliminate_elems(&mut self) -> HashSet<u32> {
         // Loop through all the counters of the IBLT until there are no
@@ -232,7 +241,7 @@ mod tests {
     use num_traits::Zero;
 
     fn init_iblt() -> InvBloomLookupTable {
-        InvBloomLookupTable::with_rate(8, 0.01, 10)
+        InvBloomLookupTable::new(8, 100, 2)
     }
 
     fn vvsum(vec: &ValueVec) -> usize {
@@ -258,13 +267,22 @@ mod tests {
     }
 
     #[test]
-    fn init_iblt_with_rate() {
+    fn test_new_iblt() {
         let iblt = init_iblt();
-        assert_eq!(iblt.num_entries(), 10*10);
+        assert_eq!(iblt.num_entries(), 100);
         assert_eq!(iblt.num_hashes(), 2);
         assert_eq!(vvsum(iblt.counters()), 0);
         assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
         assert_eq!(iblt.data().len(), iblt.num_entries() as usize);
+    }
+
+    #[test]
+    fn test_new_iblt_with_seed() {
+        let iblt1 = InvBloomLookupTable::new_with_seed(111, 8, 100, 2);
+        let iblt2 = InvBloomLookupTable::new_with_seed(222, 8, 100, 2);
+        let iblt3 = InvBloomLookupTable::new_with_seed(111, 8, 100, 2);
+        assert!(!iblt1.equals(&iblt2));
+        assert!(iblt1.equals(&iblt3));
     }
 
     #[test]
@@ -282,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert() {
+    fn test_insert_without_overflow() {
         let mut iblt = init_iblt();
         let elem = 1234_u32.to_be_bytes();
         let indexes = iblt.indexes(&elem);
@@ -320,12 +338,88 @@ mod tests {
     }
 
     #[test]
-    fn counter_overflow() {
-        // test should not panic because we handle counter overflows now
-        let mut iblt = InvBloomLookupTable::with_rate(1, 0.01, 10);
-        iblt.insert(&1234_u32.to_be_bytes());
-        assert_ne!(vvsum(iblt.counters()), 0);
-        iblt.insert(&1234_u32.to_be_bytes());
+    fn test_insert_with_counter_overflow() {
+        let mut iblt = InvBloomLookupTable::new(1, 10, 1);  // 1 bit per entry
+        let elem = 1234_u64.to_be_bytes();
+        let elem_u32 = elem_to_u32(&elem);
+        let i = iblt.indexes(&elem)[0];
+
+        // counters and data are updated
+        iblt.insert(&elem);
+        assert_eq!(iblt.counters().get(i), 1);
+        assert_eq!(iblt.data()[i], elem_u32);
+
+        // on overflow, counter is zero but data is nonzero
+        iblt.insert(&elem);
+        assert_eq!(iblt.counters().get(i), 0);
+        assert_eq!(iblt.data()[i], elem_u32 * 2);
+    }
+
+    #[test]
+    fn test_insert_with_data_wraparound() {
+        let mut iblt = InvBloomLookupTable::new(2, 10, 1);
+        let elem = 9983_u32.to_be_bytes();
+        let elem_u32 = elem_to_u32(&elem);
+        assert_eq!(elem_u32, 2086475114, "DJB hash of 9983 is very big");
+        let i = iblt.indexes(&elem)[0];
+
+        // counters and data are updated
+        iblt.insert(&elem);
+        assert_eq!(iblt.counters().get(i), 1);
+        assert_eq!(iblt.data()[i], elem_u32);
+
+        // on overflow, counter is zero but data is nonzero
+        iblt.insert(&elem);
+        iblt.insert(&elem);
+        assert_eq!(iblt.counters().get(i), 3);
+        assert!(iblt.data()[i] < elem_u32);
+    }
+
+    #[test]
+    fn test_eliminate_all_elems_without_duplicates() {
+        let mut iblt = InvBloomLookupTable::new_with_seed(111, 8, 10, 2);
+        let mut hashes = HashSet::new();
+        let n: usize = 6;
+        for i in 0..n {
+            let elem = (i as u32).to_be_bytes();
+            iblt.insert(&elem);
+            hashes.insert(elem_to_u32(&elem));
+        }
+        assert_eq!(vvsum(iblt.counters()), n * (iblt.num_hashes() as usize));
+        assert_eq!(hashes.len(), n, "djb hashes are unique in this test");
+
+        // Return the original elements
+        let elems = iblt.eliminate_elems();
+        assert_eq!(elems.len(), n);
         assert_eq!(vvsum(iblt.counters()), 0);
+        assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
+        for i in 0..n {
+            let elem = elem_to_u32(&(i as u32).to_be_bytes());
+            assert!(hashes.remove(&elem));
+        }
+    }
+
+    #[test]
+    fn test_eliminate_all_elems_with_duplicates() {
+        let mut iblt = InvBloomLookupTable::new_with_seed(111, 8, 10, 2);
+        let mut hashes = HashSet::new();
+        let n: usize = 8;
+        for i in 0..n {
+            let elem = (i as u32).to_be_bytes();
+            iblt.insert(&elem);
+            hashes.insert(elem_to_u32(&elem));
+        }
+        assert_eq!(vvsum(iblt.counters()), n * (iblt.num_hashes() as usize));
+        assert_eq!(hashes.len(), n, "djb hashes are unique in this test");
+
+        // Not all elements were eliminated
+        let elems = iblt.eliminate_elems();
+        assert!(elems.len() < n);
+        assert_eq!(vvsum(iblt.counters()),
+            (n - elems.len()) * (iblt.num_hashes() as usize));
+
+        // Test that the sums were updated correctly?
+        assert_ne!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
     }
 }
+

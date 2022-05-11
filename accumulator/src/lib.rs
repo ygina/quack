@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn iblt_many_dropped_with_ilp_solver() {
-        let accumulator = IBLTAccumulator::new_with_rate(1000, 0.1);
+        let accumulator = IBLTAccumulator::new_with_params(1000, 8, 2, 2);
         base_accumulator_test(Box::new(accumulator), 1000, 100, false);
     }
 

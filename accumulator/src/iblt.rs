@@ -29,11 +29,12 @@ extern "C" {
     ) -> i32;
 }
 
-// TODO: IBLT parameters
-const BITS_PER_ENTRY: usize = 8;
+// IBLT parameters
+const DEFAULT_BITS_PER_ENTRY: usize = 8;
+const DEFAULT_CELLS_MULTIPLIER: usize = 10;
+const DEFAULT_NUM_HASHES: u32 = 2;
 #[cfg(not(feature = "disable_validation"))]
-const WRAPAROUND_MASK: u32 = (1 << BITS_PER_ENTRY) - 1;
-const FALSE_POSITIVE_RATE: f32 = 0.0001;
+const WRAPAROUND_MASK: u32 = (1 << DEFAULT_BITS_PER_ENTRY) - 1;
 
 /// The counting bloom filter (IBLT) accumulator stores a IBLT of all processed
 /// packets in addition to the digest.
@@ -246,30 +247,35 @@ fn solve_ilp_for_iblt(
 
 impl IBLTAccumulator {
     pub fn new(threshold: usize) -> Self {
-        let iblt = InvBloomLookupTable::with_rate(
-            BITS_PER_ENTRY,
-            FALSE_POSITIVE_RATE,
-            threshold.try_into().unwrap(),
+        let iblt = InvBloomLookupTable::new(
+            DEFAULT_BITS_PER_ENTRY,
+            DEFAULT_CELLS_MULTIPLIER * threshold,
+            DEFAULT_NUM_HASHES,
         );
         debug!("{} entries and {} bits per entry",
-            iblt.num_entries(), BITS_PER_ENTRY);
+            iblt.num_entries(), DEFAULT_BITS_PER_ENTRY);
         Self {
             digest: Digest::new(),
             iblt,
         }
     }
 
-    pub fn new_with_rate(threshold: usize, fp_rate: f32) -> Self {
-        let iblt = InvBloomLookupTable::with_rate(
-            BITS_PER_ENTRY,
-            fp_rate,
-            threshold.try_into().unwrap(),
+    pub fn new_with_params(
+        threshold: usize,
+        bits_per_entry: usize,
+        cells_multiplier: usize,
+        num_hashes: u32,
+    ) -> Self {
+        let iblt = InvBloomLookupTable::new(
+            bits_per_entry,
+            cells_multiplier * threshold,
+            num_hashes,
         );
         let data_size = std::mem::size_of_val(&iblt.data()[0]);
         debug!("{} entries and {} bits per entry",
-            iblt.num_entries(), BITS_PER_ENTRY);
-        info!("size of iblt = {} bytes",
-            (iblt.num_entries() as usize) * (BITS_PER_ENTRY + data_size) / 8);
+            iblt.num_entries(), bits_per_entry);
+        info!("size of iblt = {} bytes", (iblt.num_entries() as usize) *
+            (bits_per_entry + data_size) / 8);
         Self {
             digest: Digest::new(),
             iblt,
