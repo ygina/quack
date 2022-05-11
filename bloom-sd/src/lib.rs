@@ -6,6 +6,7 @@ mod iblt;
 pub use cbf::CountingBloomFilter;
 pub use iblt::InvBloomLookupTable;
 pub use iblt::elem_to_u32;
+pub use valuevec::ValueVec;
 
 use bit_vec::BitVec;
 use siphasher::sip128::SipHasher13;

@@ -33,8 +33,6 @@ extern "C" {
 const DEFAULT_BITS_PER_ENTRY: usize = 8;
 const DEFAULT_CELLS_MULTIPLIER: usize = 10;
 const DEFAULT_NUM_HASHES: u32 = 2;
-#[cfg(not(feature = "disable_validation"))]
-const WRAPAROUND_MASK: u32 = (1 << DEFAULT_BITS_PER_ENTRY) - 1;
 
 /// The counting bloom filter (IBLT) accumulator stores a IBLT of all processed
 /// packets in addition to the digest.
@@ -66,6 +64,7 @@ fn calculate_difference_iblt(
         iblt.insert(elem);
     }
     let mut iblt_sum = 0;
+    let wraparound_mask = (1 << (iblt.counters().bits_per_val() as u32)) - 1;
     for i in 0..(iblt.num_entries() as usize) {
         let logged_count = iblt.counters().get(i);
         let received_count = received_iblt.counters().get(i);
@@ -74,7 +73,7 @@ fn calculate_difference_iblt(
         // This number is derived from the bits per entry.
         let difference_count =
             (Wrapping(logged_count) - Wrapping(received_count)).0
-            & WRAPAROUND_MASK;
+            & wraparound_mask;
         iblt.counters_mut().set(i, difference_count);
         iblt_sum += difference_count;
 
@@ -103,7 +102,7 @@ fn calculate_difference_iblt(
     // Otherwise, we simply do not handle wraparound, as the user should choose
     // a threshold that allows the number of dropped packets in a cell to rarely
     // exceed the threshold (unless dropped packets have high multiplicity?).
-    if (n_dropped as u32) <= WRAPAROUND_MASK {
+    if (n_dropped as u32) <= wraparound_mask {
         debug!("malicious wraparound detected");
     } else {
         warn!("not handling potentially benign wraparound, may need to select
@@ -409,6 +408,7 @@ mod tests {
     use bincode;
     use rand;
     use rand::Rng;
+    use bloom_sd::ValueVec;
 
     const NBYTES: usize = 16;
 
@@ -444,9 +444,127 @@ mod tests {
         assert!(acc1.equals(&acc3));
     }
 
+    fn vvsum(vec: &ValueVec) -> usize {
+        let num_entries = vec.len() / vec.bits_per_val();
+        (0..num_entries).map(|i| vec.get(i)).sum::<u32>() as usize
+    }
+
+    #[test]
+    fn test_calculate_difference_iblt_inverse() {
+        let n_logged = 100;
+        let n_dropped = 0;
+        let log = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let mut iblt = InvBloomLookupTable::new_with_seed(111, 4, 10, 3);
+        for elem in &log {
+            iblt.insert(&elem);
+        }
+        let diff = {
+            let diff = calculate_difference_iblt(n_dropped, &log, &iblt);
+            assert!(diff.is_some());
+            diff.unwrap()
+        };
+        assert_eq!(vvsum(diff.counters()), 0);
+    }
+
     #[test]
     fn test_calculate_difference_iblt() {
-        unimplemented!()
+        let n_logged = 100;
+        let n_dropped = 60;
+        let log = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        // Insert only the first 40 elements into the IBLT.
+        let bpe = 4;
+        let mut d1 = InvBloomLookupTable::new_with_seed(111, bpe, 60, 3);
+        let mut d2 = InvBloomLookupTable::new_with_seed(111, bpe, 60, 3);
+        for i in 0..n_logged {
+            d1.insert(&log[i]);
+        }
+        for i in 0..(n_logged - n_dropped) {
+            d2.insert(&log[i]);
+        }
+
+        // Calculate the difference.
+        let diff = {
+            let diff = calculate_difference_iblt(n_dropped, &log, &d2);
+            assert!(diff.is_some());
+            diff.unwrap()
+        };
+
+        // Check that every case with and without wraparound is tested.
+        let (mut counter_no_wrap, mut counter_wrap) = (1 << 31, 1 << 31);
+        let (mut data_no_wrap, mut data_wrap) = (1 << 31, 1 << 31);
+        for i in 0..(d1.num_entries() as usize) {
+            if d1.counters().get(i) >= d2.counters().get(i) {
+                counter_no_wrap = i;
+            } else {
+                counter_wrap = i;
+            }
+            if d1.data()[i] >= d2.data()[i] {
+                data_no_wrap = i;
+            } else {
+                data_wrap = i;
+            }
+        }
+        assert!(counter_no_wrap < (d1.num_entries() as usize));
+        assert!(counter_wrap < (d1.num_entries() as usize));
+        assert!(data_no_wrap < (d1.num_entries() as usize));
+        assert!(data_wrap < (d1.num_entries() as usize));
+
+        // Check that the counters and data values were subtracted correctly.
+        assert_eq!(
+            diff.counters().get(counter_no_wrap),
+            d1.counters().get(counter_no_wrap) - d2.counters().get(counter_no_wrap));
+        assert_eq!(
+            diff.counters().get(counter_wrap),
+            ((1 << bpe) - 1) - d2.counters().get(counter_wrap) + d1.counters().get(counter_wrap) + 1);
+        assert_eq!(
+            diff.data()[data_no_wrap],
+            d1.data()[data_no_wrap] - d2.data()[data_no_wrap]);
+        assert_eq!(
+            diff.data()[data_wrap],  // u32
+            u32::max_value() - d2.data()[data_wrap] + d1.data()[data_wrap] + 1);
+    }
+
+    #[test]
+    fn test_calculate_difference_iblt_with_wraparound_from_low_threshold() {
+        let n_logged = 100;
+        let n_dropped = 60;
+        let log = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let mut d1 = InvBloomLookupTable::new_with_seed(111, 4, 6, 3);
+        let mut d2 = InvBloomLookupTable::new_with_seed(111, 4, 6, 3);
+        for i in 0..n_logged {
+            d1.insert(&log[i]);
+        }
+        for i in 0..(n_logged - n_dropped) {
+            d2.insert(&log[i]);
+        }
+        assert!(calculate_difference_iblt(n_dropped, &log, &d2).is_none());
+    }
+
+    #[test]
+    fn test_calculate_difference_iblt_with_malicious_wraparound() {
+        let n_logged = 100;
+        let n_dropped = 60;
+        let log_start_i = 40;
+        let log = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let mut d1 = InvBloomLookupTable::new_with_seed(111, 4, 60, 3);
+        let mut d2 = InvBloomLookupTable::new_with_seed(111, 4, 60, 3);
+        for i in log_start_i..n_logged {
+            d1.insert(&log[i]);
+        }
+        for i in 0..(n_logged - n_dropped) {
+            d2.insert(&log[i]);
+        }
+        assert!(calculate_difference_iblt(
+            n_dropped, &log[log_start_i..].to_vec(), &d2).is_none());
     }
 
     #[test]
