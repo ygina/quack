@@ -12,12 +12,22 @@ fn build_accumulator(
     g: &mut LoadGenerator,
     accumulator_ty: &str,
     threshold: usize,
+    iblt_params: Option<Vec<&str>>,
 ) -> Box<dyn Accumulator> {
     let mut accumulator: Box<dyn Accumulator> = {
         match accumulator_ty {
             "naive" => Box::new(NaiveAccumulator::new()),
             "cbf" => Box::new(CBFAccumulator::new(threshold)),
-            "iblt" => Box::new(IBLTAccumulator::new(threshold)),
+            "iblt" => if let Some(params) = iblt_params {
+                assert_eq!(params.len(), 3);
+                let bits_per_entry: usize = params[0].parse().unwrap();
+                let cells_multiplier: usize = params[1].parse().unwrap();
+                let num_hashes: u32 = params[2].parse().unwrap();
+                Box::new(IBLTAccumulator::new_with_params(
+                    threshold, bits_per_entry, cells_multiplier, num_hashes))
+            } else {
+                Box::new(IBLTAccumulator::new(threshold))
+            },
             "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
             _ => unreachable!(),
         }
@@ -93,6 +103,12 @@ fn main() {
             .long("threshold")
             .takes_value(true)
             .default_value("1000"))
+        .arg(Arg::new("iblt-params")
+            .help("IBLT parameters.")
+            .long("iblt-params")
+            .value_names(&["bits_per_entry", "cells_multiplier", "num_hashes"])
+            .takes_value(true)
+            .number_of_values(3))
         .arg(Arg::new("trials")
             .help("Number of trials to run. Reports the median.")
             .long("trials")
@@ -110,7 +126,7 @@ fn main() {
             .required(true))
         .get_matches();
 
-    let trials: usize = matches.value_of("trials").unwrap().parse().unwrap();
+    let trials: usize = matches.value_of_t("trials").unwrap();
     let num_logged: usize = matches.value_of("num-logged").unwrap()
         .parse().unwrap();
     let p_dropped: f32 = matches.value_of("p-dropped").unwrap()
@@ -123,12 +139,15 @@ fn main() {
     let accumulator_ty = matches.value_of("accumulator").unwrap();
     let threshold: usize = matches.value_of("threshold").unwrap()
         .parse().unwrap();
+    let iblt_params: Option<Vec<&str>> = matches.values_of("iblt-params")
+        .map(|values| values.collect());
 
     let mut results = vec![];
     let mut errors = 0;
     for _ in 0..trials {
         let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
-        let acc = build_accumulator(&mut g, accumulator_ty, threshold);
+        let acc = build_accumulator(&mut g, accumulator_ty, threshold,
+            iblt_params.clone());
         if let Ok(result) = validate(acc, &g.log, malicious) {
             results.push(result);
         } else {
