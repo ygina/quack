@@ -54,7 +54,7 @@ fn validate(
     malicious: bool,
 ) -> Result<Duration, ()> {
     let t1 = Instant::now();
-    let valid = accumulator.validate(elems).unwrap_or(false);
+    let valid = accumulator.validate(elems).is_valid();
     let total = Instant::now() - t1;
     if valid == !malicious {
         info!("validation is correct ({}): {:?}", valid, total);

@@ -5,7 +5,7 @@ use bincode;
 use itertools::Itertools;
 use serde::{Serialize, Deserialize};
 
-use crate::Accumulator;
+use crate::{Accumulator, ValidationResult};
 use digest::Digest;
 
 /// The naive accumulator stores no auxiliary data structures outside
@@ -53,12 +53,12 @@ impl Accumulator for NaiveAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> ValidationResult {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> ValidationResult {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
                 .combinations(self.total()).enumerate() {
@@ -69,13 +69,13 @@ impl Accumulator for NaiveAccumulator {
                 digest.add(&elems[index]);
             }
             if digest.equals(&self.digest) {
-                return Ok(true);
+                return ValidationResult::Valid;
             }
             if i % 1000 == 0 && i != 0 {
                 debug!("tried {} combinations: {:?}", i, Instant::now() - start);
             }
         }
-        Ok(false)
+        ValidationResult::Invalid
     }
 }
 

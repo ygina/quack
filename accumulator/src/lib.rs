@@ -9,6 +9,36 @@ pub use iblt::IBLTAccumulator;
 pub use naive::NaiveAccumulator;
 pub use power_sum::PowerSumAccumulator;
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ValidationResult {
+    Valid,
+    Invalid,
+    PsumExceedsThreshold,
+    PsumErrorFindingRoots,
+    IbltBenignWraparound,
+    IbltIlpValid,
+    IbltIlpInvalid,
+    IbltMaliciousWraparound,
+}
+
+impl ValidationResult {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            ValidationResult::Valid => true,
+            ValidationResult::IbltIlpValid => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_undetermined(&self) -> bool {
+        match self {
+            ValidationResult::PsumExceedsThreshold => true,
+            ValidationResult::IbltBenignWraparound => true,
+            _ => false,
+        }
+    }
+}
+
 pub trait Accumulator {
     /// Serialize the accumulator to bytes.
     fn to_bytes(&self) -> Vec<u8>;
@@ -24,10 +54,7 @@ pub trait Accumulator {
     ///
     /// The accumulator is valid if the elements that the accumulator has
     /// processed are a subset of the provided list of elements.
-    ///
-    /// Returns an error if the result is non-determinate. Note that if the
-    /// result is determined with high probability, returns Ok.
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()>;
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> ValidationResult;
 }
 
 #[cfg(test)]
@@ -64,7 +91,7 @@ mod tests {
                 accumulator.process(&elems[i]);
             }
         }
-        let valid = accumulator.validate(&elems).unwrap_or(false);
+        let valid = accumulator.validate(&elems).is_valid();
         assert_eq!(valid, !malicious);
     }
 

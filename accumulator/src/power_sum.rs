@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use tokio::task;
 #[cfg(not(feature = "disable_validation"))]
 use tokio::runtime::Builder;
-use crate::Accumulator;
+use crate::{Accumulator, ValidationResult};
 use digest::Digest;
 #[cfg(not(feature = "disable_validation"))]
 use itertools::Itertools;
@@ -255,27 +255,27 @@ impl Accumulator for PowerSumAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> ValidationResult {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> ValidationResult {
         if self.total() == 0 {
             warn!("no elements received, valid by default");
-            return Ok(true);
+            return ValidationResult::Valid;
         }
         // The number of power sum equations we need is equal to
         // the number of lost elements. Validation cannot be performed
         // if this number exceeds the threshold.
         if elems.len() < self.total() {
             warn!("more elements received than logged");
-            return Ok(false);
+            return ValidationResult::Invalid;
         }
         let n_values = elems.len() - self.total();
         let threshold = self.power_sums.len();
         if n_values > threshold {
-            return Err(());
+            return ValidationResult::PsumExceedsThreshold;
         }
 
         // If no elements are missing, just recalculate the digest.
@@ -284,7 +284,11 @@ impl Accumulator for PowerSumAccumulator {
             for elem in elems {
                 digest.add(elem);
             }
-            return Ok(digest.equals(&self.digest));
+            return if digest.equals(&self.digest) {
+                ValidationResult::Valid
+            } else {
+                ValidationResult::Invalid
+            };
         }
 
         // Calculate the power sums of the given list of elements.
@@ -316,8 +320,8 @@ impl Accumulator for PowerSumAccumulator {
             match roots {
                 Ok(roots) => roots,
                 Err(_) => {
-                    return Ok(false);
-                }
+                    return ValidationResult::PsumErrorFindingRoots;
+                },
             }
         };
 
@@ -332,7 +336,8 @@ impl Accumulator for PowerSumAccumulator {
             for root in roots {
                 let root = u32::try_from(root);
                 if root.is_err() {
-                    return Ok(false);  // Root is not in the packet domain.
+                    // root is not in the packet domain
+                    return ValidationResult::Invalid;
                 }
                 let count = map.entry(root.unwrap()).or_insert(0);
                 *count += 1;
@@ -365,7 +370,7 @@ impl Accumulator for PowerSumAccumulator {
                     dropped += dropped_count;
                 } else if dropped_count > elems.len() {
                     error!("more elements dropped than exist candidates");
-                    return Ok(false);
+                    return ValidationResult::Invalid;
                 } else {
                     let received_count = elems.len() - dropped_count;
                     if elems.iter().collect::<HashSet<_>>().len() == 1 {
@@ -395,7 +400,7 @@ impl Accumulator for PowerSumAccumulator {
                 }
             } else {
                 error!("dropped element does not exist in log: {}", elem_u32);
-                return Ok(false);
+                return ValidationResult::Invalid;
             }
         }
         let t7 = Instant::now();
@@ -411,12 +416,16 @@ impl Accumulator for PowerSumAccumulator {
             }
             n_digests += 1;
             if digest.equals(&self.digest) {
-                return Ok(true);
+                return ValidationResult::Valid;
             }
         }
         let t8 = Instant::now();
         debug!("recalculated {} digests: {:?}", n_digests, t8 - t7);
-        Ok(digest.equals(&self.digest))
+        if digest.equals(&self.digest) {
+            ValidationResult::Valid
+        } else {
+            ValidationResult::Invalid
+        }
     }
 }
 

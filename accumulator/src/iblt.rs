@@ -6,11 +6,9 @@ use std::collections::{HashSet, HashMap};
 use std::num::Wrapping;
 
 use bincode;
-#[cfg(not(feature = "disable_validation"))]
-use num_traits::Zero;
 use serde::{Serialize, Deserialize};
 use bloom_sd::InvBloomLookupTable;
-use crate::Accumulator;
+use crate::{Accumulator, ValidationResult};
 use digest::Digest;
 #[cfg(not(feature = "disable_validation"))]
 use itertools::Itertools;
@@ -58,7 +56,7 @@ fn calculate_difference_iblt(
     n_dropped: usize,
     logged_elems: &Vec<Vec<u8>>,
     received_iblt: &InvBloomLookupTable,
-) -> Option<InvBloomLookupTable> {
+) -> Result<InvBloomLookupTable, ValidationResult> {
     let mut iblt = received_iblt.empty_clone();
     for elem in logged_elems {
         iblt.insert(elem);
@@ -82,16 +80,13 @@ fn calculate_difference_iblt(
         let received_data = received_iblt.data()[i];
         let difference_data =
             (Wrapping(logged_data) - Wrapping(received_data)).0;
-        if difference_count == 0 && !difference_data.is_zero() {
-            return None;
-        }
         iblt.data_mut()[i] = difference_data;
     }
 
     // If the number of dropped packets multiplied by the number of hashes is
     // equal to the sum of all entries in the IBLT, proceed with the ILP check.
     if (n_dropped as u32) * iblt.num_hashes() == iblt_sum {
-        return Some(iblt);
+        return Ok(iblt);
     }
 
     // Otherwise there was wraparound, which either occurs if a counter has a
@@ -104,11 +99,12 @@ fn calculate_difference_iblt(
     // exceed the threshold (unless dropped packets have high multiplicity?).
     if (n_dropped as u32) <= wraparound_mask {
         debug!("malicious wraparound detected");
+        Err(ValidationResult::IbltMaliciousWraparound)
     } else {
         warn!("not handling potentially benign wraparound, may need to select
             a bigger threshold");
+        Err(ValidationResult::IbltBenignWraparound)
     }
-    None
 }
 
 /// Checks whether there is a subset of elements with the DJB hashes of the
@@ -314,16 +310,16 @@ impl Accumulator for IBLTAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> ValidationResult {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> ValidationResult {
         let t1 = Instant::now();
         if elems.len() < self.total() {
             warn!("more elements received than logged");
-            return Ok(false);
+            return ValidationResult::Invalid;
         }
 
         // If no elements are missing, just recalculate the digest.
@@ -333,15 +329,17 @@ impl Accumulator for IBLTAccumulator {
             for elem in elems {
                 digest.add(elem);
             }
-            return Ok(digest.equals(&self.digest));
+            return if digest.equals(&self.digest) {
+                ValidationResult::Valid
+            } else {
+                ValidationResult::Invalid
+            };
         }
 
         let mut iblt = {
-            let iblt = calculate_difference_iblt(n_dropped, elems, &self.iblt);
-            if let Some(iblt) = iblt {
-                iblt
-            } else {
-                return Ok(false);
+            match calculate_difference_iblt(n_dropped, elems, &self.iblt) {
+                Ok(iblt) => iblt,
+                Err(result) => { return result; }
             }
         };
         let t2 = Instant::now();
@@ -365,11 +363,15 @@ impl Accumulator for IBLTAccumulator {
         // preimage collision.
         if removed.len() == n_dropped {
             debug!("all iblt elements removed");
-            return Ok(check_digest_from_removed_set(
+            return if check_digest_from_removed_set(
                 &self.digest,
                 elems.iter().collect(),
                 removed,
-            ));
+            ) {
+                ValidationResult::Valid
+            } else {
+                ValidationResult::Invalid
+            };
         }
 
         // Then there are still some remaining candidate dropped elements,
@@ -377,15 +379,11 @@ impl Accumulator for IBLTAccumulator {
         // could make up the counters in the IBLT.
         assert!(n_dropped > removed.len());
         let n_dropped_remaining = n_dropped - removed.len();
-        let dropped_is = if let Some(dropped_is) = solve_ilp_for_iblt(
+        let dropped_is = solve_ilp_for_iblt(
             n_dropped_remaining,
             elems,
             iblt,
-        ) {
-            dropped_is
-        } else {
-            return Ok(false);
-        };
+        ).expect("error solving ilp");
         let t4 = Instant::now();
         debug!("solved ILP: {:?}", t4 - t3);
 
@@ -399,7 +397,11 @@ impl Accumulator for IBLTAccumulator {
             .filter(|(i, _)| !dropped_is.contains(&i))
             .map(|(_, elem)| elem)
             .collect::<Vec<_>>();
-        return Ok(check_digest_from_removed_set(&self.digest, elems, removed));
+        return if check_digest_from_removed_set(&self.digest, elems, removed) {
+            ValidationResult::IbltIlpValid
+        } else {
+            ValidationResult::IbltIlpInvalid
+        }
     }
 }
 
@@ -461,11 +463,7 @@ mod tests {
         for elem in &log {
             iblt.insert(&elem);
         }
-        let diff = {
-            let diff = calculate_difference_iblt(n_dropped, &log, &iblt);
-            assert!(diff.is_some());
-            diff.unwrap()
-        };
+        let diff = calculate_difference_iblt(n_dropped, &log, &iblt).unwrap();
         assert_eq!(vvsum(diff.counters()), 0);
     }
 
@@ -489,11 +487,7 @@ mod tests {
         }
 
         // Calculate the difference.
-        let diff = {
-            let diff = calculate_difference_iblt(n_dropped, &log, &d2);
-            assert!(diff.is_some());
-            diff.unwrap()
-        };
+        let diff = calculate_difference_iblt(n_dropped, &log, &d2).unwrap();
 
         // Check that every case with and without wraparound is tested.
         let (mut counter_no_wrap, mut counter_wrap) = (1 << 31, 1 << 31);
@@ -545,14 +539,19 @@ mod tests {
         for i in 0..(n_logged - n_dropped) {
             d2.insert(&log[i]);
         }
-        assert!(calculate_difference_iblt(n_dropped, &log, &d2).is_none());
+        let res = calculate_difference_iblt(n_dropped, &log, &d2);
+        assert!(res.is_err());
+        match res {
+            Ok(_) => unreachable!(),
+            Err(e) => assert_eq!(e, ValidationResult::IbltBenignWraparound),
+        }
     }
 
     #[test]
     fn test_calculate_difference_iblt_with_malicious_wraparound() {
         let n_logged = 100;
-        let n_dropped = 60;
-        let log_start_i = 40;
+        let n_dropped = 15;
+        let log_start_i = 14;
         let log = (0..(n_logged as u32))
             .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
             .collect::<Vec<_>>();
@@ -564,8 +563,13 @@ mod tests {
         for i in 0..(n_logged - n_dropped) {
             d2.insert(&log[i]);
         }
-        assert!(calculate_difference_iblt(
-            n_dropped, &log[log_start_i..].to_vec(), &d2).is_none());
+        let res = calculate_difference_iblt(
+            n_dropped, &log[log_start_i..].to_vec(), &d2);
+        assert!(res.is_err());
+        match res {
+            Ok(_) => unreachable!(),
+            Err(e) => assert_eq!(e, ValidationResult::IbltMaliciousWraparound),
+        }
     }
 
     #[test]
