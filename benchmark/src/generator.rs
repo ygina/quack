@@ -4,6 +4,22 @@ use rand_chacha::ChaCha12Rng;
 const NBYTES: usize = 16;
 pub const MALICIOUS_ELEM: [u8; NBYTES] = [0; NBYTES];
 
+pub struct SeedGenerator {
+    rng: Option<ChaCha12Rng>,
+}
+
+impl SeedGenerator {
+    pub fn new(seed: Option<u64>) -> Self {
+        Self {
+            rng: seed.map(|seed| ChaCha12Rng::seed_from_u64(seed)),
+        }
+    }
+
+    pub fn next(&mut self) -> Option<u64> {
+        self.rng.as_mut().map(|rng| rng.gen())
+    }
+}
+
 pub struct LoadGenerator {
     /// The logged packets. All elements are in the range [0, MALICIOUS_ELEM).
     pub log: Vec<Vec<u8>>,
@@ -187,5 +203,19 @@ mod tests {
         }
         assert_eq!(p1, p2);
         assert_ne!(p1, p3);
+    }
+
+    #[test]
+    fn test_seed_generator() {
+        let mut g = SeedGenerator::new(None);
+        assert!(g.next().is_none());
+        assert!(g.next().is_none());
+        assert!(g.next().is_none());
+        let mut g = SeedGenerator::new(Some(1));
+        let s1 = g.next();
+        let s2 = g.next();
+        assert!(s1.is_some());
+        assert!(s2.is_some());
+        assert_ne!(s1, s2);
     }
 }

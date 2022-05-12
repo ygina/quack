@@ -6,7 +6,7 @@ pub mod generator;
 use std::time::{Instant, Duration};
 use clap::{Arg, Command};
 use accumulator::*;
-use generator::LoadGenerator;
+use generator::{SeedGenerator, LoadGenerator};
 
 fn build_accumulator(
     g: &mut LoadGenerator,
@@ -142,12 +142,13 @@ fn main() {
     let threshold: usize = matches.value_of_t("threshold").unwrap();
     let iblt_params: Option<Vec<&str>> = matches.values_of("iblt-params")
         .map(|values| values.collect());
-    let seed: Option<u64> = matches.value_of("seed")
-        .map(|seed| seed.parse().unwrap());
+    let mut seed_generator = SeedGenerator::new(matches.value_of("seed")
+        .map(|seed| seed.parse().unwrap()));
 
     let mut results = vec![];
     let mut errors = 0;
     for _ in 0..trials {
+        let seed = seed_generator.next();
         let mut g = LoadGenerator::new(seed, num_logged, p_dropped, malicious);
         let acc = build_accumulator(&mut g, accumulator_ty, threshold,
             iblt_params.clone(), seed.clone());
