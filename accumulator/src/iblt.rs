@@ -406,14 +406,14 @@ impl Accumulator for IBLTAccumulator {
 mod tests {
     use super::*;
     use bincode;
-    use rand;
-    use rand::Rng;
     use bloom_sd::ValueVec;
 
     const NBYTES: usize = 16;
 
-    fn gen_elems(n: usize) -> Vec<Vec<u8>> {
-        let mut rng = rand::thread_rng();
+    fn gen_elems_with_seed(n: usize, seed: u64) -> Vec<Vec<u8>> {
+        use rand::{SeedableRng, Rng};
+        use rand_chacha::ChaCha8Rng;
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
         (0..n).map(|_| (0..NBYTES).map(|_| rng.gen::<u8>()).collect()).collect()
     }
 
@@ -437,7 +437,7 @@ mod tests {
         let mut acc1 = IBLTAccumulator::new(1000);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
-        acc1.process_batch(&gen_elems(10));
+        acc1.process_batch(&gen_elems_with_seed(10, 111));
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc3: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(!acc1.equals(&acc2));
@@ -568,8 +568,102 @@ mod tests {
     }
 
     #[test]
-    fn test_check_digest_from_removed_set() {
-        unimplemented!()
+    fn test_check_digest_no_drop() {
+        let n_logged = 100;
+        let elems = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let mut d = Digest::new();
+        for e in &elems {
+            d.add(e);
+        }
+        // Succeeds because no elements are dropped
+        let elems_ref = elems.iter().collect::<Vec<_>>();
+        assert!(check_digest_from_removed_set(&d, elems_ref, HashSet::new()));
+    }
+
+    #[test]
+    fn test_check_digest_removed_elem_does_not_exist() {
+        let n_logged = 100;
+        let elems = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let hashes: HashSet<_> = elems.iter()
+            .map(|e| bloom_sd::elem_to_u32(e)).collect();
+        assert_eq!(
+            elems.len(), hashes.len(),
+            "DJB hashes are unique in this test");
+        let mut d = Digest::new();
+        for e in &elems {
+            d.add(e);
+        }
+        let removed = {
+            let mut set = HashSet::new();
+            let removed_hash: u32 = 111;
+            assert!(!hashes.contains(&removed_hash), "check no collision");
+            set.insert(removed_hash);
+            set
+        };
+        // Fails because a dropped element is not in the original log
+        let elems_ref = elems.iter().collect::<Vec<_>>();
+        assert!(!check_digest_from_removed_set(&d, elems_ref, removed));
+    }
+
+    #[test]
+    fn test_check_digest_subset_no_collisions() {
+        let n_logged = 100;
+        let n_dropped = 20;
+        let elems = (0..(n_logged as u32))
+            .map(|i| i.to_be_bytes().into_iter().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let hashes: HashSet<_> = elems.iter()
+            .map(|e| bloom_sd::elem_to_u32(e)).collect();
+        assert_eq!(
+            elems.len(), hashes.len(),
+            "DJB hashes are unique in this test");
+        let mut d = Digest::new();
+        // "Drop" the first `n_dropped` elements
+        for i in n_dropped..n_logged {
+            d.add(&elems[i]);
+        }
+        let removed = (0..n_dropped)
+            .map(|i| bloom_sd::elem_to_u32(&elems[i]))
+            .collect::<HashSet<_>>();
+        assert_eq!(removed.len(), n_dropped, "DJB hashes should be unique in \
+            the remove set (the property is also enforced because the elems \
+            eliminated from the IBLT must be unique).");
+        let elems_ref = elems.iter().collect::<Vec<_>>();
+        assert!(check_digest_from_removed_set(&d, elems_ref, removed));
+    }
+
+    #[test]
+    fn test_check_digest_subset_with_collisions() {
+        let n_logged = 10000;
+        let n_dropped = 40;
+        // With this seed, there is a collision at indexes 223 and 6875
+        let (drop_i, drop_j) = (223, 6875);
+        let elems = gen_elems_with_seed(n_logged, 112);
+        assert_eq!(
+            bloom_sd::elem_to_u32(&elems[drop_i]),
+            bloom_sd::elem_to_u32(&elems[drop_j]));
+
+        let mut d = Digest::new();
+        // "Drop" the first `n_dropped` elems and the elem at index `drop_i`
+        for i in n_dropped..n_logged {
+            if i == drop_i {
+                continue;
+            }
+            d.add(&elems[i]);
+        }
+        let mut removed = (0..n_dropped)
+            .map(|i| bloom_sd::elem_to_u32(&elems[i]))
+            .collect::<HashSet<_>>();
+        removed.insert(bloom_sd::elem_to_u32(&elems[drop_i]));
+        assert_eq!(removed.len(), n_dropped + 1, "DJB hashes should be unique \
+            in the remove set (the property is also enforced because the elems \
+            eliminated from the IBLT must be unique).");
+        let elems_ref = elems.iter().collect::<Vec<_>>();
+        assert!(check_digest_from_removed_set(&d, elems_ref, removed));
     }
 
     #[test]
