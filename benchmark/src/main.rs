@@ -77,7 +77,6 @@ fn median(mut results: Vec<Duration>) -> Duration {
 }
 
 fn main() {
-    env_logger::builder().filter_level(log::LevelFilter::Debug).init();
     let matches = Command::new("benchmark")
         .arg(Arg::new("num-logged")
             .help("Number of logged packets.")
@@ -91,6 +90,17 @@ fn main() {
             .long("p-dropped")
             .takes_value(true)
             .default_value("0.005"))
+        .arg(Arg::new("debug-level")
+            .help("Debug level.")
+            .long("debug-level")
+            .takes_value(true)
+            .possible_value("trace")
+            .possible_value("debug")
+            .possible_value("info")
+            .possible_value("warn")
+            .possible_value("error")
+            .possible_value("off")
+            .default_value("debug"))
         .arg(Arg::new("malicious")
             .help("Whether the router sends a packet without logging. \
                 The index of the malicious packet is randomly selected, \
@@ -130,6 +140,16 @@ fn main() {
             .required(true))
         .get_matches();
 
+    let debug_level = match matches.value_of("debug-level").unwrap() {
+        "trace" => log::LevelFilter::Trace,
+        "debug" => log::LevelFilter::Debug,
+        "info" => log::LevelFilter::Info,
+        "warn" => log::LevelFilter::Warn,
+        "error" => log::LevelFilter::Error,
+        "off" => log::LevelFilter::Off,
+        _ => unreachable!(),
+    };
+    env_logger::builder().filter_level(debug_level).init();
     let trials: usize = matches.value_of_t("trials").unwrap();
     let num_logged: usize = matches.value_of_t("num-logged").unwrap();
     let p_dropped: f32 = matches.value_of_t("p-dropped").unwrap();
