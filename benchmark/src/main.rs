@@ -44,7 +44,6 @@ fn build_accumulator(
         g.num_logged,
         t2 - t1,
     );
-    info!("digest size = {} bytes", accumulator.to_bytes().len());
     accumulator
 }
 
@@ -167,11 +166,14 @@ fn main() {
 
     let mut results = vec![];
     let mut errors = 0;
-    for _ in 0..trials {
+    for i in 0..trials {
         let seed = seed_generator.next();
         let mut g = LoadGenerator::new(seed, num_logged, p_dropped, malicious);
         let acc = build_accumulator(&mut g, accumulator_ty, threshold,
             iblt_params.clone(), seed.clone());
+        if i == trials - 1 {
+            warn!("digest size = {} bytes", acc.to_bytes().len());
+        }
         if let Ok(result) = validate(acc, &g.log, malicious) {
             results.push(result);
         } else {
