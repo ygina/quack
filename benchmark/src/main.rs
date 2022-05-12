@@ -52,13 +52,13 @@ fn validate(
     accumulator: Box<dyn Accumulator>,
     elems: &Vec<Vec<u8>>,
     malicious: bool,
-) -> Result<Duration, ()> {
+) -> Result<(Duration, ValidationResult), ()> {
     let t1 = Instant::now();
-    let valid = accumulator.validate(elems).is_valid();
+    let result = accumulator.validate(elems);
     let total = Instant::now() - t1;
-    if valid == !malicious {
-        info!("validation is correct ({}): {:?}", valid, total);
-        Ok(total)
+    if result.is_valid() == !malicious {
+        info!("validation is correct ({:?}): {:?}", result, total);
+        Ok((total, result))
     } else {
         error!("validation failed, expected {}", !malicious);
         Err(())
@@ -166,6 +166,7 @@ fn main() {
 
     let mut results = vec![];
     let mut errors = 0;
+    let mut ilp = 0;
     for i in 0..trials {
         let seed = seed_generator.next();
         let mut g = LoadGenerator::new(seed, num_logged, p_dropped, malicious);
@@ -174,13 +175,17 @@ fn main() {
         if i == trials - 1 {
             warn!("digest size = {} bytes", acc.to_bytes().len());
         }
-        if let Ok(result) = validate(acc, &g.log, malicious) {
-            results.push(result);
+        if let Ok((duration, result)) = validate(acc, &g.log, malicious) {
+            results.push(duration);
+            if result == ValidationResult::IbltIlpValid
+                || result == ValidationResult::IbltIlpInvalid {
+                ilp += 1;
+            }
         } else {
             errors += 1;
         }
     }
-    warn!("trials\terrors\tlogged\tp_drop\tmedian");
-    warn!("{}\t{}\t{}\t{}\t{:?}", trials, errors, num_logged, p_dropped,
-        median(results));
+    warn!("trials\tilp\terrors\tlogged\tp_drop\tmedian");
+    warn!("{}\t{}\t{}\t{}\t{}\t{:?}", trials, ilp, errors, num_logged,
+       p_dropped, median(results));
 }
