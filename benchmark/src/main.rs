@@ -60,7 +60,7 @@ fn validate(
         info!("validation is correct ({:?}): {:?}", result, total);
         Ok((total, result))
     } else {
-        error!("validation failed, expected {}", !malicious);
+        info!("validation failed, expected {}", !malicious);
         Err(())
     }
 }

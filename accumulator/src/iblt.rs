@@ -101,7 +101,7 @@ fn calculate_difference_iblt(
         debug!("malicious wraparound detected");
         Err(ValidationResult::IbltMaliciousWraparound)
     } else {
-        warn!("not handling potentially benign wraparound, may need to select
+        info!("not handling potentially benign wraparound, may need to select
             a bigger threshold");
         Err(ValidationResult::IbltBenignWraparound)
     }
