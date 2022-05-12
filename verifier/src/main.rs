@@ -82,7 +82,6 @@ fn get_accumulator(
     debug!("saving digest in {}", path);
     match ty {
         "naive" => Box::new(bincode::deserialize::<NaiveAccumulator>(&buf).unwrap()),
-        "cbf" => Box::new(bincode::deserialize::<CBFAccumulator>(&buf).unwrap()),
         "iblt" => Box::new(bincode::deserialize::<IBLTAccumulator>(&buf).unwrap()),
         "power_sum" => Box::new(bincode::deserialize::<PowerSumAccumulator>(&buf).unwrap()),
         _ => unreachable!(),
