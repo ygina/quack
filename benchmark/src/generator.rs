@@ -1,4 +1,5 @@
-use rand::{self, Rng};
+use rand::{self, SeedableRng, Rng, RngCore};
+use rand_chacha::ChaCha12Rng;
 
 const NBYTES: usize = 16;
 pub const MALICIOUS_ELEM: [u8; NBYTES] = [0; NBYTES];
@@ -18,6 +19,8 @@ pub struct LoadGenerator {
     pub num_dropped: usize,
     /// The current index in the log.
     index: usize,
+    /// Random number generator.
+    rng: Box<dyn RngCore>,
 }
 
 impl LoadGenerator {
@@ -30,8 +33,17 @@ impl LoadGenerator {
     /// The index of this packet is randomly chosen, and will always be
     /// sent even if p_dropped is 1. The iterator of the load generator
     /// will generate all packets the ISP actually receives.
-    pub fn new(num_logged: usize, p_dropped: f32, malicious: bool) -> Self {
-        let mut rng = rand::thread_rng();
+    pub fn new(
+        seed: Option<u64>,
+        num_logged: usize,
+        p_dropped: f32,
+        malicious: bool,
+    ) -> Self {
+        let mut rng: Box<dyn RngCore> = if let Some(seed) = seed {
+            Box::new(ChaCha12Rng::seed_from_u64(seed))
+        } else {
+            Box::new(rand::thread_rng())
+        };
         let log: Vec<Vec<u8>> = (0..num_logged).map(|_| loop {
             let elem: Vec<_> = (0..NBYTES).map(|_| rng.gen::<u8>()).collect();
             if elem != MALICIOUS_ELEM {
@@ -51,6 +63,7 @@ impl LoadGenerator {
             num_logged,
             num_dropped: 0,
             index: 0,
+            rng,
         }
     }
 }
@@ -74,7 +87,7 @@ impl Iterator for LoadGenerator {
                 }
             }
             // Continue until the packet is not dropped
-            let dropped = rand::thread_rng().gen::<f32>() < self.p_dropped;
+            let dropped = self.rng.gen::<f32>() < self.p_dropped;
             if dropped {
                 self.num_dropped += 1;
             } else {
@@ -88,11 +101,12 @@ impl Iterator for LoadGenerator {
 mod tests {
     use super::*;
 
+    const SEED: Option<u64> = Some(1234);
     const NUM_LOGGED: usize = 10000;
 
     #[test]
     fn no_elements_are_dropped() {
-        let mut g = LoadGenerator::new(NUM_LOGGED, 0.0, false);
+        let mut g = LoadGenerator::new(SEED, NUM_LOGGED, 0.0, false);
         let mut processed = vec![];
         while let Some(elem) = g.next() {
             processed.push(elem);
@@ -105,7 +119,7 @@ mod tests {
 
     #[test]
     fn all_elements_are_dropped() {
-        let mut g = LoadGenerator::new(NUM_LOGGED, 1.0, false);
+        let mut g = LoadGenerator::new(SEED, NUM_LOGGED, 1.0, false);
         let mut processed = vec![];
         while let Some(elem) = g.next() {
             processed.push(elem);
@@ -118,7 +132,7 @@ mod tests {
 
     #[test]
     fn some_elements_are_dropped() {
-        let mut g = LoadGenerator::new(NUM_LOGGED, 0.5, false);
+        let mut g = LoadGenerator::new(SEED, NUM_LOGGED, 0.5, false);
         let mut processed = vec![];
         while let Some(elem) = g.next() {
             processed.push(elem);
@@ -132,7 +146,7 @@ mod tests {
 
     #[test]
     fn malicious_element_is_generated_but_not_logged() {
-        let mut g = LoadGenerator::new(NUM_LOGGED, 0.5, true);
+        let mut g = LoadGenerator::new(SEED, NUM_LOGGED, 0.5, true);
         let mut processed = vec![];
         while let Some(elem) = g.next() {
             processed.push(elem);
@@ -147,12 +161,31 @@ mod tests {
 
     #[test]
     fn malicious_element_is_not_dropped() {
-        let mut g = LoadGenerator::new(NUM_LOGGED, 1.0, true);
+        let mut g = LoadGenerator::new(SEED, NUM_LOGGED, 1.0, true);
         let mut processed = vec![];
         while let Some(elem) = g.next() {
             processed.push(elem);
         }
         assert_eq!(g.num_dropped, NUM_LOGGED - 1);
         assert_eq!(processed.len(), 1);
+    }
+
+    #[test]
+    fn seed_load_generator() {
+        let mut g1 = LoadGenerator::new(SEED, NUM_LOGGED, 0.0, false);
+        let mut g2 = LoadGenerator::new(SEED, NUM_LOGGED, 0.0, false);
+        let mut g3 = LoadGenerator::new(None, NUM_LOGGED, 0.0, false);
+        let (mut p1, mut p2, mut p3) = (vec![], vec![], vec![]);
+        while let Some(e) = g1.next() {
+            p1.push(e);
+        }
+        while let Some(e) = g2.next() {
+            p2.push(e);
+        }
+        while let Some(e) = g3.next() {
+            p3.push(e);
+        }
+        assert_eq!(p1, p2);
+        assert_ne!(p1, p3);
     }
 }

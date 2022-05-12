@@ -111,7 +111,7 @@ fn main() {
             .takes_value(true)
             .number_of_values(3))
         .arg(Arg::new("seed")
-            .help("IBLT seed for reproducible results.")
+            .help("IBLT and load generator seed for reproducible results.")
             .long("seed")
             .takes_value(true))
         .arg(Arg::new("trials")
@@ -148,7 +148,7 @@ fn main() {
     let mut results = vec![];
     let mut errors = 0;
     for _ in 0..trials {
-        let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
+        let mut g = LoadGenerator::new(seed, num_logged, p_dropped, malicious);
         let acc = build_accumulator(&mut g, accumulator_ty, threshold,
             iblt_params.clone(), seed.clone());
         if let Ok(result) = validate(acc, &g.log, malicious) {
