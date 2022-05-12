@@ -667,7 +667,63 @@ mod tests {
     }
 
     #[test]
-    fn test_solve_ilp_for_iblt() {
-        unimplemented!()
+    fn test_solve_ilp_for_iblt_success_whp() {
+        let n_logged = 1000;
+        let n_dropped = 100;
+        let elems = gen_elems_with_seed(n_logged, 123);
+
+        // Set up the IBLT with the dropped elements and eliminate.
+        let mut iblt = InvBloomLookupTable::new_with_seed(1234, 8, 200, 2);
+        for i in 0..n_dropped {
+            iblt.insert(&elems[i]);
+        }
+        let mut removed = iblt.eliminate_elems();
+        let n_dropped_remaining = n_dropped - removed.len();
+        assert_ne!(n_dropped_remaining, 0, "this test requires the ILP");
+        let result = solve_ilp_for_iblt(n_dropped_remaining, &elems, iblt);
+        assert!(result.is_some(), "no error when solving ILP");
+        let result = result.unwrap();
+        assert_eq!(result.len(), n_dropped_remaining);
+
+        // Check that the results are the first `n_dropped` elements,
+        // at least with high probability.
+        let mut dropped_is = (0..n_dropped).collect::<HashSet<usize>>();
+        for dropped_i in result {
+            assert!(dropped_is.remove(&dropped_i), "{}", dropped_i);
+        }
+        for dropped_i in dropped_is {
+            assert!(removed.remove(&bloom_sd::elem_to_u32(&elems[dropped_i])),
+                "{}", dropped_i);
+        }
+    }
+
+    #[test]
+    fn test_solve_ilp_for_iblt_failure_whp() {
+        let n_logged = 1000;
+        let n_dropped = 100;
+        let elems = gen_elems_with_seed(n_logged, 123);
+
+        // Set up the IBLT with the dropped elements and eliminate.
+        let mut iblt = InvBloomLookupTable::new_with_seed(1234, 8, 150, 2);
+        for i in 0..n_dropped {
+            iblt.insert(&elems[i]);
+        }
+        let removed = iblt.eliminate_elems();
+        let n_dropped_remaining = n_dropped - removed.len();
+        assert_ne!(n_dropped_remaining, 0, "this test requires the ILP");
+        let result = solve_ilp_for_iblt(n_dropped_remaining, &elems, iblt);
+        assert!(result.is_some(), "no error when solving ILP");
+        let result = result.unwrap();
+        assert_eq!(result.len(), n_dropped_remaining);
+
+        // Check that the results are the first `n_dropped` elements,
+        // at least with high probability.
+        // A slightly smaller IBLT results in a non-robust ILP solver.
+        let mut dropped_is = (0..n_dropped).collect::<HashSet<usize>>();
+        let mut d_expected = true;
+        for dropped_i in result {
+            d_expected = d_expected && dropped_is.remove(&dropped_i);
+        }
+        assert!(!d_expected);
     }
 }
