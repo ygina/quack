@@ -13,6 +13,7 @@ fn build_accumulator(
     accumulator_ty: &str,
     threshold: usize,
     iblt_params: Option<Vec<&str>>,
+    seed: Option<u64>,
 ) -> Box<dyn Accumulator> {
     let mut accumulator: Box<dyn Accumulator> = {
         match accumulator_ty {
@@ -23,9 +24,10 @@ fn build_accumulator(
                 let cells_multiplier: usize = params[1].parse().unwrap();
                 let num_hashes: u32 = params[2].parse().unwrap();
                 Box::new(IBLTAccumulator::new_with_params(
-                    threshold, bits_per_entry, cells_multiplier, num_hashes))
+                    threshold, bits_per_entry, cells_multiplier, num_hashes,
+                    seed))
             } else {
-                Box::new(IBLTAccumulator::new(threshold))
+                Box::new(IBLTAccumulator::new(threshold, seed))
             },
             "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
             _ => unreachable!(),
@@ -108,6 +110,10 @@ fn main() {
             .value_names(&["bits_per_entry", "cells_multiplier", "num_hashes"])
             .takes_value(true)
             .number_of_values(3))
+        .arg(Arg::new("seed")
+            .help("IBLT seed for reproducible results.")
+            .long("seed")
+            .takes_value(true))
         .arg(Arg::new("trials")
             .help("Number of trials to run. Reports the median.")
             .long("trials")
@@ -125,27 +131,26 @@ fn main() {
         .get_matches();
 
     let trials: usize = matches.value_of_t("trials").unwrap();
-    let num_logged: usize = matches.value_of("num-logged").unwrap()
-        .parse().unwrap();
-    let p_dropped: f32 = matches.value_of("p-dropped").unwrap()
-        .parse().unwrap();
+    let num_logged: usize = matches.value_of_t("num-logged").unwrap();
+    let p_dropped: f32 = matches.value_of_t("p-dropped").unwrap();
     let malicious: bool = matches.is_present("malicious");
     debug!("num_logged = {}", num_logged);
     debug!("p_dropped = {}", p_dropped);
     debug!("malicious = {}", malicious);
 
     let accumulator_ty = matches.value_of("accumulator").unwrap();
-    let threshold: usize = matches.value_of("threshold").unwrap()
-        .parse().unwrap();
+    let threshold: usize = matches.value_of_t("threshold").unwrap();
     let iblt_params: Option<Vec<&str>> = matches.values_of("iblt-params")
         .map(|values| values.collect());
+    let seed: Option<u64> = matches.value_of("seed")
+        .map(|seed| seed.parse().unwrap());
 
     let mut results = vec![];
     let mut errors = 0;
     for _ in 0..trials {
         let mut g = LoadGenerator::new(num_logged, p_dropped, malicious);
         let acc = build_accumulator(&mut g, accumulator_ty, threshold,
-            iblt_params.clone());
+            iblt_params.clone(), seed.clone());
         if let Ok(result) = validate(acc, &g.log, malicious) {
             results.push(result);
         } else {

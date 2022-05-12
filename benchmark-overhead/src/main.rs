@@ -33,7 +33,7 @@ fn gen_accumulator(ty: &str, threshold: usize) -> Box<dyn Accumulator> {
     match ty {
         "mock" => Box::new(MockAccumulator {}),
         "naive" => Box::new(NaiveAccumulator::new()),
-        "iblt" => Box::new(IBLTAccumulator::new(threshold)),
+        "iblt" => Box::new(IBLTAccumulator::new(threshold, None)),
         "psum" => Box::new(PowerSumAccumulator::new(threshold)),
         _ => unreachable!(),
     }

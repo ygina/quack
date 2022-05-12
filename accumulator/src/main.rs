@@ -216,7 +216,7 @@ async fn main() {
             .parse().unwrap();
         match matches.value_of("accumulator").unwrap() {
             "naive" => Box::new(NaiveAccumulator::new()),
-            "iblt" => Box::new(IBLTAccumulator::new(threshold)),
+            "iblt" => Box::new(IBLTAccumulator::new(threshold, None)),
             "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
             _ => unreachable!(),
         }

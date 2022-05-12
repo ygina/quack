@@ -245,40 +245,41 @@ fn solve_ilp_for_iblt(
 }
 
 impl IBLTAccumulator {
-    pub fn new(threshold: usize) -> Self {
-        let iblt = InvBloomLookupTable::new(
-            DEFAULT_BITS_PER_ENTRY,
-            DEFAULT_CELLS_MULTIPLIER * threshold,
-            DEFAULT_NUM_HASHES,
-        );
-        debug!("{} entries and {} bits per entry",
-            iblt.num_entries(), DEFAULT_BITS_PER_ENTRY);
+    pub fn new_with_params(
+        threshold: usize,
+        bits_per_entry: usize,
+        cells_multiplier: usize,
+        num_hashes: u32,
+        seed: Option<u64>,
+    ) -> Self {
+        let iblt = if let Some(seed) = seed {
+            InvBloomLookupTable::new_with_seed(
+                seed,
+                bits_per_entry,
+                cells_multiplier * threshold,
+                num_hashes,
+            )
+        } else {
+            InvBloomLookupTable::new(
+                bits_per_entry,
+                cells_multiplier * threshold,
+                num_hashes,
+            )
+        };
         Self {
             digest: Digest::new(),
             iblt,
         }
     }
 
-    pub fn new_with_params(
-        threshold: usize,
-        bits_per_entry: usize,
-        cells_multiplier: usize,
-        num_hashes: u32,
-    ) -> Self {
-        let iblt = InvBloomLookupTable::new(
-            bits_per_entry,
-            cells_multiplier * threshold,
-            num_hashes,
-        );
-        let data_size = std::mem::size_of_val(&iblt.data()[0]);
-        debug!("{} entries and {} bits per entry",
-            iblt.num_entries(), bits_per_entry);
-        info!("size of iblt = {} bytes", (iblt.num_entries() as usize) *
-            (bits_per_entry + data_size) / 8);
-        Self {
-            digest: Digest::new(),
-            iblt,
-        }
+    pub fn new(threshold: usize, seed: Option<u64>) -> Self {
+        Self::new_with_params(
+            threshold,
+            DEFAULT_BITS_PER_ENTRY,
+            DEFAULT_CELLS_MULTIPLIER,
+            DEFAULT_NUM_HASHES,
+            seed,
+        )
     }
 
     pub fn equals(&self, other: &Self) -> bool {
@@ -419,14 +420,14 @@ mod tests {
 
     #[test]
     fn test_not_equals() {
-        let acc1 = IBLTAccumulator::new(100);
-        let acc2 = IBLTAccumulator::new(100);
+        let acc1 = IBLTAccumulator::new(100, None);
+        let acc2 = IBLTAccumulator::new(100, None);
         assert!(!acc1.equals(&acc2), "different digest nonce");
     }
 
     #[test]
     fn empty_serialization() {
-        let acc1 = IBLTAccumulator::new(1000);
+        let acc1 = IBLTAccumulator::new(1000, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(acc1.equals(&acc2));
@@ -434,7 +435,7 @@ mod tests {
 
     #[test]
     fn serialization_with_data() {
-        let mut acc1 = IBLTAccumulator::new(1000);
+        let mut acc1 = IBLTAccumulator::new(1000, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems_with_seed(10, 111));
