@@ -69,7 +69,7 @@ fn median(mut results: Vec<Duration>) -> Duration {
     results.sort();
     let mid = results.len() / 2;
     if results.len() & 1 == 0 {
-        (results[mid] + results[mid + 1]) / 2
+        (results[mid] + results[mid - 1]) / 2
     } else {
         results[mid]
     }
