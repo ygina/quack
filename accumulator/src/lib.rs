@@ -1,17 +1,10 @@
 #[macro_use]
 extern crate log;
 
-mod cbf;
 mod iblt;
 mod naive;
 mod power_sum;
 
-#[cfg(not(feature = "disable_validation"))]
-use std::collections::HashMap;
-#[cfg(not(feature = "disable_validation"))]
-use digest::Digest;
-
-pub use cbf::CBFAccumulator;
 pub use iblt::IBLTAccumulator;
 pub use naive::NaiveAccumulator;
 pub use power_sum::PowerSumAccumulator;
@@ -32,25 +25,6 @@ pub trait Accumulator {
     /// The accumulator is valid if the elements that the accumulator has
     /// processed are a subset of the provided list of elements.
     fn validate(&self, elems: &Vec<Vec<u8>>) -> bool;
-}
-
-#[cfg(not(feature = "disable_validation"))]
-fn check_digest(
-    elems: &Vec<Vec<u8>>,
-    mut dropped_count: HashMap<Vec<u8>, usize>,
-    expected: &Digest,
-) -> bool {
-    let mut digest = Digest::new();
-    for elem in elems {
-        if let Some(count) = dropped_count.remove(elem) {
-            if count > 0 {
-                dropped_count.insert(elem.clone(), count - 1);
-            }
-        } else {
-            digest.add(elem);
-        }
-    }
-    digest.equals(expected)
 }
 
 #[cfg(test)]
@@ -189,56 +163,6 @@ mod tests {
     fn power_sum_one_malicious_and_many_dropped() {
         // validation is much faster than the naive approach
         let accumulator = PowerSumAccumulator::new(1000);
-        base_accumulator_test(Box::new(accumulator), 1000, 10, true);
-    }
-
-    #[test]
-    fn cbf_none_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 0, false);
-    }
-
-    #[test]
-    fn cbf_all_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 100, false);
-    }
-
-    #[test]
-    fn cbf_one_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 1, false);
-    }
-
-    #[test]
-    fn cbf_two_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 2, false);
-    }
-
-    #[test]
-    fn cbf_many_dropped() {
-        let accumulator = CBFAccumulator::new(1000);
-        base_accumulator_test(Box::new(accumulator), 1000, 10, false);
-    }
-
-    #[test]
-    fn cbf_one_malicious_and_none_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 0, true);
-    }
-
-    #[test]
-    fn cbf_one_malicious_and_one_dropped() {
-        let accumulator = CBFAccumulator::new(100);
-        base_accumulator_test(Box::new(accumulator), 100, 1, true);
-    }
-
-    #[test]
-    fn cbf_one_malicious_and_many_dropped() {
-        // validation is much faster compared to the naive approach,
-        // so we increase the number of packets
-        let accumulator = CBFAccumulator::new(100);
         base_accumulator_test(Box::new(accumulator), 1000, 10, true);
     }
 
