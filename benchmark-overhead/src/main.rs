@@ -24,7 +24,7 @@ impl Accumulator for MockAccumulator {
     fn total(&self) -> usize {
         unimplemented!()
     }
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         unimplemented!()
     }
 }

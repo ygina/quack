@@ -314,16 +314,16 @@ impl Accumulator for IBLTAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         let t1 = Instant::now();
         if elems.len() < self.total() {
             warn!("more elements received than logged");
-            return false;
+            return Ok(false);
         }
 
         // If no elements are missing, just recalculate the digest.
@@ -333,7 +333,7 @@ impl Accumulator for IBLTAccumulator {
             for elem in elems {
                 digest.add(elem);
             }
-            return digest.equals(&self.digest);
+            return Ok(digest.equals(&self.digest));
         }
 
         let mut iblt = {
@@ -341,7 +341,7 @@ impl Accumulator for IBLTAccumulator {
             if let Some(iblt) = iblt {
                 iblt
             } else {
-                return false;
+                return Ok(false);
             }
         };
         let t2 = Instant::now();
@@ -365,11 +365,11 @@ impl Accumulator for IBLTAccumulator {
         // preimage collision.
         if removed.len() == n_dropped {
             debug!("all iblt elements removed");
-            return check_digest_from_removed_set(
+            return Ok(check_digest_from_removed_set(
                 &self.digest,
                 elems.iter().collect(),
                 removed,
-            );
+            ));
         }
 
         // Then there are still some remaining candidate dropped elements,
@@ -384,7 +384,7 @@ impl Accumulator for IBLTAccumulator {
         ) {
             dropped_is
         } else {
-            return false;
+            return Ok(false);
         };
         let t4 = Instant::now();
         debug!("solved ILP: {:?}", t4 - t3);
@@ -399,7 +399,7 @@ impl Accumulator for IBLTAccumulator {
             .filter(|(i, _)| !dropped_is.contains(&i))
             .map(|(_, elem)| elem)
             .collect::<Vec<_>>();
-        return check_digest_from_removed_set(&self.digest, elems, removed);
+        return Ok(check_digest_from_removed_set(&self.digest, elems, removed));
     }
 }
 

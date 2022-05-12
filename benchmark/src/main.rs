@@ -55,7 +55,7 @@ fn validate(
     malicious: bool,
 ) -> Result<Duration, ()> {
     let t1 = Instant::now();
-    let valid = accumulator.validate(elems);
+    let valid = accumulator.validate(elems).unwrap_or(false);
     let total = Instant::now() - t1;
     if valid == !malicious {
         info!("validation is correct ({}): {:?}", valid, total);
@@ -178,6 +178,7 @@ fn main() {
             errors += 1;
         }
     }
-    info!("errors\tlogged\tp_drop\tmedian");
-    info!("{}\t{}\t{}\t{:?}", errors, num_logged, p_dropped, median(results));
+    warn!("trials\terrors\tlogged\tp_drop\tmedian");
+    warn!("{}\t{}\t{}\t{}\t{:?}", trials, errors, num_logged, p_dropped,
+        median(results));
 }

@@ -255,27 +255,27 @@ impl Accumulator for PowerSumAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         if self.total() == 0 {
             warn!("no elements received, valid by default");
-            return true;
+            return Ok(true);
         }
         // The number of power sum equations we need is equal to
         // the number of lost elements. Validation cannot be performed
         // if this number exceeds the threshold.
         if elems.len() < self.total() {
             warn!("more elements received than logged");
-            return false;
+            return Ok(false);
         }
         let n_values = elems.len() - self.total();
         let threshold = self.power_sums.len();
         if n_values > threshold {
-            panic!("number of lost elements exceeds threshold");
+            return Err(());
         }
 
         // If no elements are missing, just recalculate the digest.
@@ -284,7 +284,7 @@ impl Accumulator for PowerSumAccumulator {
             for elem in elems {
                 digest.add(elem);
             }
-            return digest.equals(&self.digest);
+            return Ok(digest.equals(&self.digest));
         }
 
         // Calculate the power sums of the given list of elements.
@@ -316,7 +316,7 @@ impl Accumulator for PowerSumAccumulator {
             match roots {
                 Ok(roots) => roots,
                 Err(_) => {
-                    return false;
+                    return Ok(false);
                 }
             }
         };
@@ -332,7 +332,7 @@ impl Accumulator for PowerSumAccumulator {
             for root in roots {
                 let root = u32::try_from(root);
                 if root.is_err() {
-                    return false;  // Root is not in the packet domain.
+                    return Ok(false);  // Root is not in the packet domain.
                 }
                 let count = map.entry(root.unwrap()).or_insert(0);
                 *count += 1;
@@ -365,7 +365,7 @@ impl Accumulator for PowerSumAccumulator {
                     dropped += dropped_count;
                 } else if dropped_count > elems.len() {
                     error!("more elements dropped than exist candidates");
-                    return false;
+                    return Ok(false);
                 } else {
                     let received_count = elems.len() - dropped_count;
                     if elems.iter().collect::<HashSet<_>>().len() == 1 {
@@ -395,7 +395,7 @@ impl Accumulator for PowerSumAccumulator {
                 }
             } else {
                 error!("dropped element does not exist in log: {}", elem_u32);
-                return false;
+                return Ok(false);
             }
         }
         let t7 = Instant::now();
@@ -411,12 +411,12 @@ impl Accumulator for PowerSumAccumulator {
             }
             n_digests += 1;
             if digest.equals(&self.digest) {
-                return true;
+                return Ok(true);
             }
         }
         let t8 = Instant::now();
         debug!("recalculated {} digests: {:?}", n_digests, t8 - t7);
-        digest.equals(&self.digest)
+        Ok(digest.equals(&self.digest))
     }
 }
 

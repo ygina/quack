@@ -295,7 +295,7 @@ fn check_truncation(
     let mut hi = logs.len() - accumulator.total();
     while lo != hi {
         let mid = (lo + hi) / 2;
-        if accumulator.validate(&logs[..logs.len() - mid].to_vec()) {
+        if accumulator.validate(&logs[..logs.len() - mid].to_vec()).unwrap_or(false) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -422,7 +422,7 @@ fn main() {
         info!("get_router_logs: {:?}", t3 - t2);
         info!("{}/{} packets received", accumulator.total(), router_logs.len());
         assert!(accumulator.total() <= router_logs.len());
-        let valid = accumulator.validate(&router_logs);
+        let valid = accumulator.validate(&router_logs).unwrap_or(false);
         if valid {
             info!("valid router");
         } else {

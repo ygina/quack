@@ -53,12 +53,12 @@ impl Accumulator for NaiveAccumulator {
     }
 
     #[cfg(feature = "disable_validation")]
-    fn validate(&self, _elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, _elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         panic!("validation not enabled")
     }
 
     #[cfg(not(feature = "disable_validation"))]
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool {
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()> {
         let start = Instant::now();
         for (i, combination) in (0..elems.len())
                 .combinations(self.total()).enumerate() {
@@ -69,13 +69,13 @@ impl Accumulator for NaiveAccumulator {
                 digest.add(&elems[index]);
             }
             if digest.equals(&self.digest) {
-                return true;
+                return Ok(true);
             }
             if i % 1000 == 0 && i != 0 {
                 debug!("tried {} combinations: {:?}", i, Instant::now() - start);
             }
         }
-        false
+        Ok(false)
     }
 }
 

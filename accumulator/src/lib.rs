@@ -24,7 +24,10 @@ pub trait Accumulator {
     ///
     /// The accumulator is valid if the elements that the accumulator has
     /// processed are a subset of the provided list of elements.
-    fn validate(&self, elems: &Vec<Vec<u8>>) -> bool;
+    ///
+    /// Returns an error if the result is non-determinate. Note that if the
+    /// result is determined with high probability, returns Ok.
+    fn validate(&self, elems: &Vec<Vec<u8>>) -> Result<bool, ()>;
 }
 
 #[cfg(test)]
@@ -61,7 +64,7 @@ mod tests {
                 accumulator.process(&elems[i]);
             }
         }
-        let valid = accumulator.validate(&elems);
+        let valid = accumulator.validate(&elems).unwrap_or(false);
         assert_eq!(valid, !malicious);
     }
 
