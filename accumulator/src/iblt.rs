@@ -248,6 +248,11 @@ impl IBLTAccumulator {
         num_hashes: u32,
         seed: Option<u64>,
     ) -> Self {
+        let digest = if let Some(seed) = seed {
+            Digest::new_with_seed(seed.to_be_bytes())
+        } else {
+            Digest::new()
+        };
         let iblt = if let Some(seed) = seed {
             InvBloomLookupTable::new_with_seed(
                 seed,
@@ -262,10 +267,7 @@ impl IBLTAccumulator {
                 num_hashes,
             )
         };
-        Self {
-            digest: Digest::new(),
-            iblt,
-        }
+        Self { digest, iblt }
     }
 
     pub fn new(threshold: usize, seed: Option<u64>) -> Self {

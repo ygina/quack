@@ -216,9 +216,17 @@ fn find_integer_monic_polynomial_roots(
 }
 
 impl PowerSumAccumulator {
-    pub fn new(threshold: usize) -> Self {
+    pub fn new(
+        threshold: usize,
+        seed: Option<u64>,
+    ) -> Self {
+        let digest = if let Some(seed) = seed {
+            Digest::new_with_seed(seed.to_be_bytes())
+        } else {
+            Digest::new()
+        };
         Self {
-            digest: Digest::new(),
+            digest,
             power_sums: (0..threshold).map(|_| 0).collect(),
         }
     }
@@ -445,14 +453,14 @@ mod test {
 
     #[test]
     fn test_not_equals() {
-        let acc1 = PowerSumAccumulator::new(100);
-        let acc2 = PowerSumAccumulator::new(100);
+        let acc1 = PowerSumAccumulator::new(100, None);
+        let acc2 = PowerSumAccumulator::new(100, None);
         assert_ne!(acc1, acc2, "different digest nonce");
     }
 
     #[test]
     fn empty_serialization() {
-        let acc1 = PowerSumAccumulator::new(100);
+        let acc1 = PowerSumAccumulator::new(100, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
         assert_eq!(acc1, acc2);
@@ -460,7 +468,7 @@ mod test {
 
     #[test]
     fn serialization_with_data() {
-        let mut acc1 = PowerSumAccumulator::new(100);
+        let mut acc1 = PowerSumAccumulator::new(100, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));

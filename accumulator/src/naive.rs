@@ -22,10 +22,13 @@ pub struct NaiveAccumulator {
 }
 
 impl NaiveAccumulator {
-    pub fn new() -> Self {
-        Self {
-            digest: Digest::new(),
-        }
+    pub fn new(seed: Option<u64>) -> Self {
+        let digest = if let Some(seed) = seed {
+            Digest::new_with_seed(seed.to_be_bytes())
+        } else {
+            Digest::new()
+        };
+        Self { digest }
     }
 }
 
@@ -95,14 +98,14 @@ mod tests {
 
     #[test]
     fn test_not_equals() {
-        let acc1 = NaiveAccumulator::new();
-        let acc2 = NaiveAccumulator::new();
+        let acc1 = NaiveAccumulator::new(None);
+        let acc2 = NaiveAccumulator::new(None);
         assert_ne!(acc1, acc2, "different digest nonce");
     }
 
     #[test]
     fn empty_serialization() {
-        let acc1 = NaiveAccumulator::new();
+        let acc1 = NaiveAccumulator::new(None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: NaiveAccumulator = bincode::deserialize(&bytes).unwrap();
         assert_eq!(acc1, acc2);
@@ -110,7 +113,7 @@ mod tests {
 
     #[test]
     fn serialization_with_data() {
-        let mut acc1 = NaiveAccumulator::new();
+        let mut acc1 = NaiveAccumulator::new(None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: NaiveAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));

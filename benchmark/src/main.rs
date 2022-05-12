@@ -17,7 +17,7 @@ fn build_accumulator(
 ) -> Box<dyn Accumulator> {
     let mut accumulator: Box<dyn Accumulator> = {
         match accumulator_ty {
-            "naive" => Box::new(NaiveAccumulator::new()),
+            "naive" => Box::new(NaiveAccumulator::new(seed)),
             "iblt" => if let Some(params) = iblt_params {
                 assert_eq!(params.len(), 3);
                 let bits_per_entry: usize = params[0].parse().unwrap();
@@ -29,7 +29,7 @@ fn build_accumulator(
             } else {
                 Box::new(IBLTAccumulator::new(threshold, seed))
             },
-            "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
+            "power_sum" => Box::new(PowerSumAccumulator::new(threshold, seed)),
             _ => unreachable!(),
         }
     };

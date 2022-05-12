@@ -215,9 +215,9 @@ async fn main() {
         let threshold: usize = matches.value_of("threshold").unwrap()
             .parse().unwrap();
         match matches.value_of("accumulator").unwrap() {
-            "naive" => Box::new(NaiveAccumulator::new()),
+            "naive" => Box::new(NaiveAccumulator::new(None)),
             "iblt" => Box::new(IBLTAccumulator::new(threshold, None)),
-            "power_sum" => Box::new(PowerSumAccumulator::new(threshold)),
+            "power_sum" => Box::new(PowerSumAccumulator::new(threshold, None)),
             _ => unreachable!(),
         }
     };

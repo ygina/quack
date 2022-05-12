@@ -97,45 +97,45 @@ mod tests {
 
     #[test]
     fn naive_none_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 0, false);
     }
 
     #[test]
     fn naive_all_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 0, false);
     }
 
     #[test]
     fn naive_one_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 1, false);
     }
 
     #[ignore]
     #[test]
     fn naive_two_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 2, false);
     }
 
     #[ignore]
     #[test]
     fn naive_three_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 3, false);
     }
 
     #[test]
     fn naive_one_malicious_and_none_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 0, true);
     }
 
     #[test]
     fn naive_one_malicious_and_one_dropped() {
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 1, true);
     }
 
@@ -144,56 +144,56 @@ mod tests {
     fn naive_one_malicious_and_many_dropped() {
         // validation takes much longer to fail because many
         // combinations must be tried and they all fail
-        let accumulator = NaiveAccumulator::new();
+        let accumulator = NaiveAccumulator::new(SEED);
         base_accumulator_test(Box::new(accumulator), 100, 3, true);
     }
 
     #[test]
     fn power_sum_none_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
+        let accumulator = PowerSumAccumulator::new(100, SEED);
         base_accumulator_test(Box::new(accumulator), 100, 0, false);
     }
 
     #[test]
     fn power_sum_all_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
+        let accumulator = PowerSumAccumulator::new(100, SEED);
         base_accumulator_test(Box::new(accumulator), 100, 0, false);
     }
 
     #[test]
     fn power_sum_one_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
+        let accumulator = PowerSumAccumulator::new(100, SEED);
         base_accumulator_test(Box::new(accumulator), 100, 1, false);
     }
 
     #[test]
     fn power_sum_two_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
+        let accumulator = PowerSumAccumulator::new(100, SEED);
         base_accumulator_test(Box::new(accumulator), 100, 2, false);
     }
 
     #[test]
     fn power_sum_many_dropped() {
-        let accumulator = PowerSumAccumulator::new(1000);
+        let accumulator = PowerSumAccumulator::new(1000, SEED);
         base_accumulator_test(Box::new(accumulator), 1000, 10, false);
     }
 
     #[test]
     fn power_sum_one_malicious_and_none_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
+        let accumulator = PowerSumAccumulator::new(100, SEED);
         base_accumulator_test(Box::new(accumulator), 100, 0, true);
     }
 
     #[test]
     fn power_sum_one_malicious_and_one_dropped() {
-        let accumulator = PowerSumAccumulator::new(100);
+        let accumulator = PowerSumAccumulator::new(100, SEED);
         base_accumulator_test(Box::new(accumulator), 100, 1, true);
     }
 
     #[test]
     fn power_sum_one_malicious_and_many_dropped() {
         // validation is much faster than the naive approach
-        let accumulator = PowerSumAccumulator::new(1000);
+        let accumulator = PowerSumAccumulator::new(1000, SEED);
         base_accumulator_test(Box::new(accumulator), 1000, 10, true);
     }
 
