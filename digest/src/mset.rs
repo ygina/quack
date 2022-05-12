@@ -8,7 +8,7 @@ use serde::{Serialize, Deserialize};
 use sha3::{Digest, Sha3_256};
 
 pub const NBYTES_HASH: usize = 32;
-pub const NBYTES_NONCE: usize = 16;
+pub const NBYTES_NONCE: usize = 8;
 type AmhHash = [u8; NBYTES_HASH];
 type AmhNonce = [u8; NBYTES_NONCE];
 
