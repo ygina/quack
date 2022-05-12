@@ -76,11 +76,11 @@ fn calculate_difference_iblt(
         iblt_sum += difference_count;
 
         // Additionally set the data value
-        let logged_data = iblt.data()[i];
-        let received_data = received_iblt.data()[i];
+        let logged_data = iblt.data().get(i);
+        let received_data = received_iblt.data().get(i);
         let difference_data =
             (Wrapping(logged_data) - Wrapping(received_data)).0;
-        iblt.data_mut()[i] = difference_data;
+        iblt.data_mut().set(i, difference_data);
     }
 
     // If the number of dropped packets multiplied by the number of hashes is
@@ -500,7 +500,7 @@ mod tests {
             } else {
                 counter_wrap = i;
             }
-            if d1.data()[i] >= d2.data()[i] {
+            if d1.data().get(i) >= d2.data().get(i) {
                 data_no_wrap = i;
             } else {
                 data_wrap = i;
@@ -519,11 +519,11 @@ mod tests {
             diff.counters().get(counter_wrap),
             ((1 << bpe) - 1) - d2.counters().get(counter_wrap) + d1.counters().get(counter_wrap) + 1);
         assert_eq!(
-            diff.data()[data_no_wrap],
-            d1.data()[data_no_wrap] - d2.data()[data_no_wrap]);
+            diff.data().get(data_no_wrap),
+            d1.data().get(data_no_wrap) - d2.data().get(data_no_wrap));
         assert_eq!(
-            diff.data()[data_wrap],  // u32
-            u32::max_value() - d2.data()[data_wrap] + d1.data()[data_wrap] + 1);
+            diff.data().get(data_wrap),  // u32
+            u32::max_value() - d2.data().get(data_wrap) + d1.data().get(data_wrap) + 1);
     }
 
     #[test]

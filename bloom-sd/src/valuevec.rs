@@ -20,7 +20,7 @@ use crate::BitVecDef;
 
 /// A ValueVec is a bit vector that holds fixed sized unsigned integer
 /// values.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct ValueVec {
     bits_per_val: usize,
     mask: u32,
@@ -33,10 +33,12 @@ impl ValueVec {
     /// Create a ValueVec that holds values with `bits_per_val` bits and
     /// space to hold `count` values.
     pub fn new(bits_per_val: usize, count: usize) -> ValueVec {
+        assert!(bits_per_val > 0);
+        assert!(bits_per_val <= 32);
         let bits = bits_per_val*count;
         ValueVec {
             bits_per_val: bits_per_val,
-            mask: 2u32.pow(bits_per_val as u32)-1,
+            mask: ((1_u64 << (bits_per_val as u64))-1) as u32,
             bits: BitVec::from_elem(bits,false),
         }
     }

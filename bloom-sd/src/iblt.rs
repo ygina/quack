@@ -11,11 +11,13 @@ use crate::valuevec::ValueVec;
 use crate::hashing::HashIter;
 use crate::SipHasher13Def;
 
+const DJB_HASH_SIZE: usize = 32;
+
 #[derive(Serialize, Deserialize)]
 pub struct InvBloomLookupTable {
     counters: ValueVec,
     // sum of djb_hashed data with wraparound overflow
-    data: Vec<u32>,
+    data: ValueVec,
     num_entries: u64,
     num_hashes: u32,
     seed: u64,
@@ -61,7 +63,7 @@ impl InvBloomLookupTable {
         use rand::{SeedableRng, rngs::SmallRng, Rng};
         let mut rng = SmallRng::seed_from_u64(seed);
         InvBloomLookupTable {
-            data: vec![0; num_entries],
+            data: ValueVec::new(DJB_HASH_SIZE, num_entries),
             counters: ValueVec::new(bits_per_entry, num_entries),
             num_entries: num_entries as u64,
             num_hashes,
@@ -75,7 +77,7 @@ impl InvBloomLookupTable {
     pub fn empty_clone(&self) -> Self {
         let bits_per_entry = self.counters.bits_per_val();
         Self {
-            data: vec![0; self.num_entries as usize],
+            data: ValueVec::new(DJB_HASH_SIZE, self.num_entries as usize),
             counters: ValueVec::new(bits_per_entry, self.num_entries as usize),
             num_entries: self.num_entries,
             num_hashes: self.num_hashes,
@@ -85,11 +87,11 @@ impl InvBloomLookupTable {
         }
     }
 
-    pub fn data(&self) -> &Vec<u32> {
+    pub fn data(&self) -> &ValueVec {
         &self.data
     }
 
-    pub fn data_mut(&mut self) -> &mut Vec<u32> {
+    pub fn data_mut(&mut self) -> &mut ValueVec {
         &mut self.data
     }
 
@@ -150,7 +152,8 @@ impl InvBloomLookupTable {
                 // TODO: write a test for wraparound
                 self.counters.set(idx, 0);
             }
-            self.data[idx] = (Wrapping(self.data[idx]) + Wrapping(item_u32)).0;
+            self.data.set(
+                idx, (Wrapping(self.data.get(idx)) + Wrapping(item_u32)).0);
         }
         min > 0
     }
@@ -174,7 +177,8 @@ impl InvBloomLookupTable {
             } else {
                 self.counters.set(idx, cur - 1);
             }
-            self.data[idx] = (Wrapping(self.data[idx]) - Wrapping(item_u32)).0;
+            self.data.set(
+                idx, (Wrapping(self.data.get(idx)) - Wrapping(item_u32)).0);
         }
     }
 
@@ -221,7 +225,7 @@ impl InvBloomLookupTable {
                 if self.counters.get(i) != 1 {
                     continue;
                 }
-                let item = self.data[i].clone();
+                let item = self.data.get(i).clone();
                 self.remove_u32(item);
                 assert!(removed_set.insert(item));
                 removed = true;
@@ -237,8 +241,6 @@ impl InvBloomLookupTable {
 mod tests {
     use super::*;
     use bincode;
-    use num_bigint::BigUint;
-    use num_traits::Zero;
 
     fn init_iblt() -> InvBloomLookupTable {
         InvBloomLookupTable::new(8, 100, 2)
@@ -247,6 +249,16 @@ mod tests {
     fn vvsum(vec: &ValueVec) -> usize {
         let num_entries = vec.len() / vec.bits_per_val();
         (0..num_entries).map(|i| vec.get(i)).sum::<u32>() as usize
+    }
+
+    fn data_is_nonzero(vec: &ValueVec) -> bool {
+        let num_entries = vec.len() / vec.bits_per_val();
+        for i in 0..num_entries {
+            if vec.get(i) != 0 {
+                return true;
+            }
+        }
+        false
     }
 
     #[test]
@@ -272,8 +284,7 @@ mod tests {
         assert_eq!(iblt.num_entries(), 100);
         assert_eq!(iblt.num_hashes(), 2);
         assert_eq!(vvsum(iblt.counters()), 0);
-        assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
-        assert_eq!(iblt.data().len(), iblt.num_entries() as usize);
+        assert_eq!(vvsum(iblt.data()), 0);
     }
 
     #[test]
@@ -306,19 +317,19 @@ mod tests {
         let indexes = iblt.indexes(&elem);
         for &idx in &indexes {
             assert_eq!(iblt.counters().get(idx), 0);
-            assert_eq!(iblt.data()[idx], 0);
+            assert_eq!(iblt.data().get(idx), 0);
         }
         assert!(!iblt.insert(&elem), "element did not exist already");
         assert_eq!(vvsum(iblt.counters()), 1 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_ne!(iblt.data()[idx], 0);
+            assert_ne!(iblt.data().get(idx), 0);
         }
         assert!(iblt.insert(&elem), "added element twice");
         assert_eq!(vvsum(iblt.counters()), 2 * iblt.num_hashes() as usize);
         for &idx in &indexes {
             assert_ne!(iblt.counters().get(idx), 0);
-            assert_ne!(iblt.data()[idx], 0);
+            assert_ne!(iblt.data().get(idx), 0);
         }
     }
 
@@ -330,8 +341,8 @@ mod tests {
         let iblt2 = iblt1.empty_clone();
         assert!(vvsum(iblt1.counters()) > 0);
         assert_eq!(vvsum(iblt2.counters()), 0);
-        assert_ne!(iblt1.data().iter().sum::<BigUint>(), BigUint::zero());
-        assert_eq!(iblt2.data().iter().sum::<BigUint>(), BigUint::zero());
+        assert!(data_is_nonzero(iblt1.data()));
+        assert_eq!(vvsum(iblt2.data()), 0);
         assert_eq!(
             iblt1.indexes(&1234_u32.to_be_bytes()),
             iblt2.indexes(&1234_u32.to_be_bytes()));
@@ -347,12 +358,12 @@ mod tests {
         // counters and data are updated
         iblt.insert(&elem);
         assert_eq!(iblt.counters().get(i), 1);
-        assert_eq!(iblt.data()[i], elem_u32);
+        assert_eq!(iblt.data().get(i), elem_u32);
 
         // on overflow, counter is zero but data is nonzero
         iblt.insert(&elem);
         assert_eq!(iblt.counters().get(i), 0);
-        assert_eq!(iblt.data()[i], elem_u32 * 2);
+        assert_eq!(iblt.data().get(i), elem_u32 * 2);
     }
 
     #[test]
@@ -366,13 +377,13 @@ mod tests {
         // counters and data are updated
         iblt.insert(&elem);
         assert_eq!(iblt.counters().get(i), 1);
-        assert_eq!(iblt.data()[i], elem_u32);
+        assert_eq!(iblt.data().get(i), elem_u32);
 
         // on overflow, counter is zero but data is nonzero
         iblt.insert(&elem);
         iblt.insert(&elem);
         assert_eq!(iblt.counters().get(i), 3);
-        assert!(iblt.data()[i] < elem_u32);
+        assert!(iblt.data().get(i) < elem_u32);
     }
 
     #[test]
@@ -392,7 +403,7 @@ mod tests {
         let elems = iblt.eliminate_elems();
         assert_eq!(elems.len(), n);
         assert_eq!(vvsum(iblt.counters()), 0);
-        assert_eq!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
+        assert_eq!(vvsum(iblt.data()), 0);
         for i in 0..n {
             let elem = elem_to_u32(&(i as u32).to_be_bytes());
             assert!(hashes.remove(&elem));
@@ -419,7 +430,7 @@ mod tests {
             (n - elems.len()) * (iblt.num_hashes() as usize));
 
         // Test that the sums were updated correctly?
-        assert_ne!(iblt.data().iter().sum::<BigUint>(), BigUint::zero());
+        assert!(data_is_nonzero(iblt.data()));
     }
 }
 
