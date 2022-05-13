@@ -90,7 +90,7 @@ fn get_accumulator(
                 DEFAULT_NUM_HASHES,
             ))
         },
-        "power_sum" => Box::new(bincode::deserialize::<PowerSumAccumulator>(&buf).unwrap()),
+        "power_sum" => Box::new(PowerSumAccumulator::from_bytes(&buf)),
         _ => unreachable!(),
     }
 }

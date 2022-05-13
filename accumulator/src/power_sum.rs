@@ -10,7 +10,7 @@ use tokio::task;
 #[cfg(not(feature = "disable_validation"))]
 use tokio::runtime::Builder;
 use crate::{Accumulator, ValidationResult};
-use digest::Digest;
+use digest::{AmhHash, Digest};
 #[cfg(not(feature = "disable_validation"))]
 use itertools::Itertools;
 
@@ -215,6 +215,14 @@ fn find_integer_monic_polynomial_roots(
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct MiniPowerSumAccumulator {
+    hash: AmhHash,       // [u8; HASH_SIZE]
+    count: u16,          // expect ~1024 = 2^10
+    seed: u64,           // seed for multiset hash, IBLT hash
+    power_sums: Vec<u8>, // DJB_HASH_SIZE bits per power sum
+}
+
 impl PowerSumAccumulator {
     pub fn new(
         threshold: usize,
@@ -230,11 +238,38 @@ impl PowerSumAccumulator {
             power_sums: (0..threshold).map(|_| 0).collect(),
         }
     }
+
+    pub fn from_bytes(bytes: &Vec<u8>) -> Self {
+        assert_eq!(bloom_sd::DJB_HASH_SIZE % 8, 0);
+        let bytes_per_psum = bloom_sd::DJB_HASH_SIZE / 8;
+        let x: MiniPowerSumAccumulator = bincode::deserialize(bytes).unwrap();
+        let num_psums = x.power_sums.len() / bytes_per_psum;
+        Self {
+            digest: Digest {
+                hash: x.hash,
+                count: x.count as u32,
+                nonce: x.seed.to_be_bytes(),
+            },
+            power_sums: (0..num_psums)
+                .map(|i| &x.power_sums[(i * bytes_per_psum)..((i+1) *
+                   bytes_per_psum)])
+                .map(|b| [b[0], b[1], b[2], b[3]])
+                .map(|bytes| u32::from_be_bytes(bytes))
+                .collect(),
+        }
+    }
 }
 
 impl Accumulator for PowerSumAccumulator {
     fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
+        assert_eq!(self.digest.count, (self.digest.count as u16) as u32);
+        bincode::serialize(&MiniPowerSumAccumulator {
+            hash: self.digest.hash,
+            count: self.digest.count as u16,
+            seed: u64::from_be_bytes(self.digest.nonce),
+            power_sums: self.power_sums.iter()
+                .flat_map(|psum| psum.to_be_bytes()).collect(),
+        }).unwrap()
     }
 
     fn reset(&mut self) {
@@ -459,7 +494,7 @@ mod test {
     }
 
     #[test]
-    fn empty_serialization() {
+    fn bincode_empty_serialization() {
         let acc1 = PowerSumAccumulator::new(100, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
@@ -467,13 +502,30 @@ mod test {
     }
 
     #[test]
-    fn serialization_with_data() {
+    fn bincode_serialization_with_data() {
         let mut acc1 = PowerSumAccumulator::new(100, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
         acc1.process_batch(&gen_elems(10));
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc3: PowerSumAccumulator = bincode::deserialize(&bytes).unwrap();
+        assert_ne!(acc1, acc2);
+        assert_eq!(acc1, acc3);
+    }
+
+    #[test]
+    fn empty_serialization() {
+        let acc1 = PowerSumAccumulator::new(100, None);
+        let acc2 = PowerSumAccumulator::from_bytes(&acc1.to_bytes());
+        assert_eq!(acc1, acc2);
+    }
+
+    #[test]
+    fn serialization_with_data() {
+        let mut acc1 = PowerSumAccumulator::new(100, None);
+        let acc2 = PowerSumAccumulator::from_bytes(&acc1.to_bytes());
+        acc1.process_batch(&gen_elems(10));
+        let acc3 = PowerSumAccumulator::from_bytes(&acc1.to_bytes());
         assert_ne!(acc1, acc2);
         assert_eq!(acc1, acc3);
     }
