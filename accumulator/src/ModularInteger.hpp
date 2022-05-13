@@ -1,5 +1,5 @@
-#ifndef MODULAR_INTEGER_HPP
-#define MODULAR_INTEGER_HPP
+#ifndef MODULAR_INTEGER_HPP_INCLUDED
+#define MODULAR_INTEGER_HPP_INCLUDED
 
 #include <limits>      // for std::numeric_limits
 #include <type_traits> // for std::is_integral, std::is_unsigned
@@ -110,11 +110,11 @@ struct ModularInteger {
         }
     }
 
-    constexpr ModularInteger inv() const noexcept {
+    consteval ModularInteger inv() const noexcept {
         return pow<(MODULUS - 2)>();
     }
 
 }; // struct ModularInteger
 
 
-#endif // MODULAR_INTEGER_HPP
+#endif // MODULAR_INTEGER_HPP_INCLUDED

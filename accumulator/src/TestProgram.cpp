@@ -10,8 +10,8 @@
 #include <unordered_map> // for std::unordered_map
 #include <vector>    // for std::vector
 
-#include "ModularInteger.hpp"
 #include "PowerSumAccumulator.hpp"
+#include "MonicPolynomialEvaluator.hpp"
 
 
 // static std::chrono::high_resolution_clock::time_point begin_time;
@@ -62,6 +62,8 @@ int main() {
     using packet_limits = std::numeric_limits<packet_t>;
     using accumulator_t = PowerSumAccumulator<packet_t, wide_t,
                                               MODULUS, DIGEST_SIZE>;
+    using evaluator_t = MonicPolynomialEvaluator<packet_t, wide_t,
+                                                 MODULUS, DIGEST_SIZE>;
 
     // Initialize C++ PRNG.
     std::random_device rd;
@@ -115,7 +117,7 @@ int main() {
         // this polynomial p. If so, the server adds that packet to a queue of
         // packets to be re-sent to the middlebox.
         for (const auto &packet : sent_packets) {
-            if (!evaluate_monic_polynomial(coeffs, packet)) {
+            if (!evaluator_t::eval(coeffs, packet)) {
                 resent_packets.push_back(packet);
             }
         }
