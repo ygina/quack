@@ -11,7 +11,7 @@ use crate::valuevec::ValueVec;
 use crate::hashing::HashIter;
 use crate::SipHasher13Def;
 
-const DJB_HASH_SIZE: usize = 32;
+pub const DJB_HASH_SIZE: usize = 32;
 
 #[derive(Serialize, Deserialize)]
 pub struct InvBloomLookupTable {
@@ -111,25 +111,21 @@ impl InvBloomLookupTable {
         self.num_hashes
     }
 
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
     pub fn equals(&self, other: &Self) -> bool {
-        if self.num_entries != other.num_entries
-            || self.num_hashes != other.num_hashes
-            || self.hash_builder_one.keys() != other.hash_builder_one.keys()
-            || self.hash_builder_two.keys() != other.hash_builder_two.keys()
-            || self.data != other.data
-        {
-            return false;
-        }
-        let nbits = self.counters.len();
-        if nbits != other.counters.len() {
-            return false;
-        }
-        for i in 0..(nbits / self.counters.bits_per_val()) {
-            if self.counters.get(i) != other.counters.get(i) {
-                return false;
-            }
-        }
-        true
+        let a = self.num_entries == other.num_entries;
+        let b = self.num_hashes == other.num_hashes;
+        let c = self.hash_builder_one.keys() == other.hash_builder_one.keys();
+        let d = self.hash_builder_two.keys() == other.hash_builder_two.keys();
+        let e = self.data == other.data;
+        let f = self.counters == other.counters;
+        println!("{} {} {} {} {} {}", a, b, c, d, e, f);
+        println!("{} {}", self.data.bits_per_val, other.data.bits_per_val);
+
+        a && b && c && d && e && f
     }
 
     /// Inserts an item, returns true if the item was already in the filter

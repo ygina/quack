@@ -5,7 +5,7 @@ mod iblt;
 
 pub use cbf::CountingBloomFilter;
 pub use iblt::InvBloomLookupTable;
-pub use iblt::elem_to_u32;
+pub use iblt::{elem_to_u32, DJB_HASH_SIZE};
 pub use valuevec::ValueVec;
 
 use bit_vec::BitVec;

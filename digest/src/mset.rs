@@ -9,15 +9,15 @@ use sha3::{Digest, Sha3_256};
 
 pub const NBYTES_HASH: usize = 32;
 pub const NBYTES_NONCE: usize = 8;
-type AmhHash = [u8; NBYTES_HASH];
-type AmhNonce = [u8; NBYTES_NONCE];
+pub type AmhHash = [u8; NBYTES_HASH];
+pub type AmhNonce = [u8; NBYTES_NONCE];
 
 /// Incremental additive multiset hash.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdditiveMsetHash {
-    hash: AmhHash,
+    pub hash: AmhHash,
     pub count: u32,
-    nonce: AmhNonce,
+    pub nonce: AmhNonce,
 }
 
 fn hash_fn(bit: u8, val: &[u8]) -> AmhHash {

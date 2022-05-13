@@ -9,3 +9,4 @@ pub type Digest = AdditiveMsetHash;
 
 pub use xor::XorDigest;
 pub use mset::AdditiveMsetHash;
+pub use mset::AmhHash;

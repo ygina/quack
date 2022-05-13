@@ -22,10 +22,10 @@ use crate::BitVecDef;
 /// values.
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct ValueVec {
-    bits_per_val: usize,
-    mask: u32,
+    pub bits_per_val: usize,
+    pub mask: u32,
     #[serde(with = "BitVecDef")]
-    bits: BitVec,
+    pub bits: BitVec,
 }
 
 impl ValueVec {

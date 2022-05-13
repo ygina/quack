@@ -5,7 +5,7 @@ mod iblt;
 mod naive;
 mod power_sum;
 
-pub use iblt::IBLTAccumulator;
+pub use iblt::*;
 pub use naive::NaiveAccumulator;
 pub use power_sum::PowerSumAccumulator;
 

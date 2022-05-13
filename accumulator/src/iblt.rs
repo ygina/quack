@@ -6,10 +6,11 @@ use std::collections::{HashSet, HashMap};
 use std::num::Wrapping;
 
 use bincode;
+use bit_vec::BitVec;
 use serde::{Serialize, Deserialize};
-use bloom_sd::InvBloomLookupTable;
+use bloom_sd::{ValueVec, InvBloomLookupTable};
 use crate::{Accumulator, ValidationResult};
-use digest::Digest;
+use digest::{Digest, AmhHash};
 #[cfg(not(feature = "disable_validation"))]
 use itertools::Itertools;
 
@@ -28,9 +29,9 @@ extern "C" {
 }
 
 // IBLT parameters
-const DEFAULT_BITS_PER_ENTRY: usize = 8;
-const DEFAULT_CELLS_MULTIPLIER: usize = 10;
-const DEFAULT_NUM_HASHES: u32 = 2;
+pub const DEFAULT_BITS_PER_ENTRY: usize = 8;
+pub const DEFAULT_CELLS_MULTIPLIER: usize = 10;
+pub const DEFAULT_NUM_HASHES: u32 = 2;
 
 /// The counting bloom filter (IBLT) accumulator stores a IBLT of all processed
 /// packets in addition to the digest.
@@ -240,6 +241,15 @@ fn solve_ilp_for_iblt(
         .collect::<HashSet<_>>())
 }
 
+#[derive(Serialize, Deserialize)]
+struct MiniIBLTAccumulator {
+    hash: AmhHash,     // [u8; HASH_SIZE]
+    count: u16,        // expect ~1024 = 2^10
+    seed: u64,         // seed for multiset hash, IBLT hash
+    counters: Vec<u8>, // bits_per_val = IBLT_BITS_PER_ENTRY
+    data: Vec<u8>,     // bits_per_val = DJB_HASH_SIZE
+}
+
 impl IBLTAccumulator {
     pub fn new_with_params(
         threshold: usize,
@@ -253,20 +263,13 @@ impl IBLTAccumulator {
         } else {
             Digest::new()
         };
-        let iblt = if let Some(seed) = seed {
-            InvBloomLookupTable::new_with_seed(
-                seed,
-                bits_per_entry,
-                cells_multiplier * threshold,
-                num_hashes,
-            )
-        } else {
-            InvBloomLookupTable::new(
-                bits_per_entry,
-                cells_multiplier * threshold,
-                num_hashes,
-            )
-        };
+        let seed = u64::from_be_bytes(digest.nonce);
+        let iblt = InvBloomLookupTable::new_with_seed(
+            seed,
+            bits_per_entry,
+            cells_multiplier * threshold,
+            num_hashes,
+        );
         Self { digest, iblt }
     }
 
@@ -280,6 +283,36 @@ impl IBLTAccumulator {
         )
     }
 
+    pub fn from_bytes(
+        bytes: &Vec<u8>,
+        bits_per_entry: usize,
+        num_hashes: u32,
+    ) -> Self {
+        fn to_valuevec(bytes: Vec<u8>, bpe: usize) -> ValueVec {
+            ValueVec {
+                bits_per_val: bpe,
+                mask: ((1_u64 << (bpe as u64))-1) as u32,
+                bits: BitVec::from_bytes(&bytes),
+            }
+        }
+
+        let x: MiniIBLTAccumulator =
+            bincode::deserialize(bytes).unwrap();
+        let num_entries = x.counters.len() * 8 / bits_per_entry;
+        let mut iblt = InvBloomLookupTable::new_with_seed(
+            x.seed, bits_per_entry, num_entries, num_hashes);
+        *iblt.counters_mut() = to_valuevec(x.counters, bits_per_entry);
+        *iblt.data_mut() = to_valuevec(x.data, bloom_sd::DJB_HASH_SIZE);
+        Self {
+            digest: Digest {
+                hash: x.hash,
+                count: x.count as u32,
+                nonce: x.seed.to_be_bytes(),
+            },
+            iblt,
+        }
+    }
+
     pub fn equals(&self, other: &Self) -> bool {
         self.digest == other.digest
             && self.iblt.equals(&other.iblt)
@@ -288,7 +321,14 @@ impl IBLTAccumulator {
 
 impl Accumulator for IBLTAccumulator {
     fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
+        assert_eq!(self.digest.count, (self.digest.count as u16) as u32);
+        bincode::serialize(&MiniIBLTAccumulator {
+            hash: self.digest.hash,
+            count: self.digest.count as u16,
+            seed: u64::from_be_bytes(self.digest.nonce),
+            counters: self.iblt.counters().bits.to_bytes(),
+            data: self.iblt.data().bits.to_bytes(),
+        }).unwrap()
     }
 
     fn reset(&mut self) {
@@ -410,8 +450,6 @@ impl Accumulator for IBLTAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode;
-    use bloom_sd::ValueVec;
 
     const NBYTES: usize = 16;
 
@@ -430,7 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_serialization() {
+    fn bincode_empty_serialization() {
         let acc1 = IBLTAccumulator::new(1000, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
@@ -438,7 +476,7 @@ mod tests {
     }
 
     #[test]
-    fn serialization_with_data() {
+    fn bincode_serialization_with_data() {
         let mut acc1 = IBLTAccumulator::new(1000, None);
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc2: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
@@ -446,6 +484,57 @@ mod tests {
         let bytes = bincode::serialize(&acc1).unwrap();
         let acc3: IBLTAccumulator = bincode::deserialize(&bytes).unwrap();
         assert!(!acc1.equals(&acc2));
+        assert!(acc1.equals(&acc3));
+    }
+
+    #[test]
+    fn empty_serialization() {
+        let acc1 = IBLTAccumulator::new(1000, None);
+        let bytes = acc1.to_bytes();
+        let acc2 = IBLTAccumulator::from_bytes(
+            &bytes,
+            DEFAULT_BITS_PER_ENTRY,
+            DEFAULT_NUM_HASHES,
+        );
+        assert_eq!(acc1.digest.hash, acc2.digest.hash);
+        assert_eq!(acc1.digest.count, acc2.digest.count);
+        assert_eq!(acc1.digest.nonce, acc2.digest.nonce);
+        assert_eq!(acc1.iblt.num_entries(), acc2.iblt.num_entries());
+        assert_eq!(acc1.iblt.num_hashes(), acc2.iblt.num_hashes());
+        assert_eq!(acc1.iblt.seed(), acc2.iblt.seed());
+        let elem = 1234_u32.to_be_bytes();
+        assert_eq!(acc1.iblt.indexes(&elem), acc2.iblt.indexes(&elem));
+        assert!(acc1.equals(&acc2));
+    }
+
+    #[test]
+    fn serialization_with_data() {
+        // repeat empty serialization
+        let mut acc1 = IBLTAccumulator::new(1000, None);
+        let acc2 = IBLTAccumulator::from_bytes(
+            &acc1.to_bytes(),
+            DEFAULT_BITS_PER_ENTRY,
+            DEFAULT_NUM_HASHES,
+        );
+        assert!(acc1.equals(&acc2));
+
+        // process 10 elements in acc1, then serialize and deserialize in acc3
+        acc1.process_batch(&gen_elems_with_seed(10, 111));
+        let acc3 = IBLTAccumulator::from_bytes(
+            &acc1.to_bytes(),
+            DEFAULT_BITS_PER_ENTRY,
+            DEFAULT_NUM_HASHES,
+        );
+        assert!(!acc1.equals(&acc2));
+        assert!(!acc3.equals(&acc2));
+        assert_eq!(acc1.digest.count, acc3.digest.count);
+        assert_eq!(acc1.digest.nonce, acc3.digest.nonce);
+        assert_eq!(acc1.digest.hash, acc3.digest.hash);
+        assert_eq!(acc1.iblt.num_entries(), acc3.iblt.num_entries());
+        assert_eq!(acc1.iblt.num_hashes(), acc3.iblt.num_hashes());
+        assert_eq!(acc1.iblt.seed(), acc3.iblt.seed());
+        let elem = 1234_u32.to_be_bytes();
+        assert_eq!(acc1.iblt.indexes(&elem), acc3.iblt.indexes(&elem));
         assert!(acc1.equals(&acc3));
     }
 

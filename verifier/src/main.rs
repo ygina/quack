@@ -82,7 +82,14 @@ fn get_accumulator(
     debug!("saving digest in {}", path);
     match ty {
         "naive" => Box::new(bincode::deserialize::<NaiveAccumulator>(&buf).unwrap()),
-        "iblt" => Box::new(bincode::deserialize::<IBLTAccumulator>(&buf).unwrap()),
+        "iblt" => {
+            warn!("do IBLT parameters match the router's?");
+            Box::new(IBLTAccumulator::from_bytes(
+                &buf,
+                DEFAULT_BITS_PER_ENTRY,
+                DEFAULT_NUM_HASHES,
+            ))
+        },
         "power_sum" => Box::new(bincode::deserialize::<PowerSumAccumulator>(&buf).unwrap()),
         _ => unreachable!(),
     }
