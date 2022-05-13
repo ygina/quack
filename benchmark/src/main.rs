@@ -167,6 +167,7 @@ fn main() {
     let mut results = vec![];
     let mut errors = 0;
     let mut ilp = 0;
+    let mut collisions = 0;
     for i in 0..trials {
         let seed = seed_generator.next();
         let mut g = LoadGenerator::new(seed, num_logged, p_dropped, malicious);
@@ -177,15 +178,17 @@ fn main() {
         }
         if let Ok((duration, result)) = validate(acc, &g.log, malicious) {
             results.push(duration);
-            if result == ValidationResult::IbltIlpValid
-                || result == ValidationResult::IbltIlpInvalid {
+            if result.is_ilp() {
                 ilp += 1;
+            }
+            if result.is_collisions() {
+                collisions += 1;
             }
         } else {
             errors += 1;
         }
     }
-    warn!("trials\tilp\terrors\tlogged\tp_drop\tmedian");
-    warn!("{}\t{}\t{}\t{}\t{}\t{:?}", trials, ilp, errors, num_logged,
-       p_dropped, median(results));
+    warn!("trials\tcollis\tilp\terrors\tlogged\tp_drop\tmedian");
+    warn!("{}\t{}\t{}\t{}\t{}\t{}\t{:?}", trials, collisions, ilp, errors,
+       num_logged, p_dropped, median(results));
 }

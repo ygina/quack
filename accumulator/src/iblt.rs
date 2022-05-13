@@ -114,12 +114,15 @@ fn calculate_difference_iblt(
 /// - `removed_u32`: the set of DJB hashes of removed elements from the IBLT.
 ///    Elements are necessarily unique or they would have hashed to the same
 ///    slot in the IBLT.
+///
+/// Returns whether the digest is valid, and whether any collisions were
+/// resolved.
 #[cfg(not(feature = "disable_validation"))]
 fn check_digest_from_removed_set(
     expected_digest: &Digest,
     elems: Vec<&Vec<u8>>,
     removed: HashSet<u32>,
-) -> bool {
+) -> (bool, bool) {
     // Create a map from DJB hash to elements that hash to that value. If the
     // DJB hash is not in the removed set, then the packet was not dropped, so
     // add it to the digest. Otherwise, it might have been dropped.
@@ -137,7 +140,7 @@ fn check_digest_from_removed_set(
     // If not every element in the removed set has a preimage, we are missing
     // an element from the log.
     if removed.len() != collisions_map.len() {
-        return false;
+        return (false, false);
     }
 
     // Remove any entries from the collisions map with only one preimage value.
@@ -151,7 +154,7 @@ fn check_digest_from_removed_set(
     if combinations.len() == 0 {
         debug!("no collisions, checking digest");
         assert_eq!(digest.count, expected_digest.count);
-        return digest.equals(&expected_digest);
+        return (digest.equals(&expected_digest), false);
     }
     debug!("handling collisions for {} removed elems", combinations.len());
 
@@ -171,10 +174,10 @@ fn check_digest_from_removed_set(
                 n_digests,
                 Instant::now() - t1,
             );
-            return true;
+            return (true, true);
         }
     }
-    false
+    (false, true)
 }
 
 /// Returns the indexes of the dropped elements in `elems` that satisfy the
@@ -405,14 +408,16 @@ impl Accumulator for IBLTAccumulator {
         // preimage collision.
         if removed.len() == n_dropped {
             debug!("all iblt elements removed");
-            return if check_digest_from_removed_set(
+            let (valid, collisions) = check_digest_from_removed_set(
                 &self.digest,
                 elems.iter().collect(),
                 removed,
-            ) {
-                ValidationResult::Valid
-            } else {
-                ValidationResult::Invalid
+            );
+            return match (valid, collisions) {
+                (true, false) => ValidationResult::Valid,
+                (false, false) => ValidationResult::Invalid,
+                (true, true) => ValidationResult::IbltCollisionsValid,
+                (false, true) => ValidationResult::IbltCollisionsInvalid,
             };
         }
 
@@ -439,11 +444,14 @@ impl Accumulator for IBLTAccumulator {
             .filter(|(i, _)| !dropped_is.contains(&i))
             .map(|(_, elem)| elem)
             .collect::<Vec<_>>();
-        return if check_digest_from_removed_set(&self.digest, elems, removed) {
-            ValidationResult::IbltIlpValid
-        } else {
-            ValidationResult::IbltIlpInvalid
-        }
+        let (valid, collisions) =
+            check_digest_from_removed_set(&self.digest, elems, removed);
+        return match (valid, collisions) {
+            (true, false) => ValidationResult::IbltIlpValid,
+            (false, false) => ValidationResult::IbltIlpInvalid,
+            (true, true) => ValidationResult::IbltIlpCollisionsValid,
+            (false, true) => ValidationResult::IbltIlpCollisionsInvalid,
+        };
     }
 }
 
@@ -675,7 +683,10 @@ mod tests {
         }
         // Succeeds because no elements are dropped
         let elems_ref = elems.iter().collect::<Vec<_>>();
-        assert!(check_digest_from_removed_set(&d, elems_ref, HashSet::new()));
+        let (valid, collisions) =
+            check_digest_from_removed_set(&d, elems_ref, HashSet::new());
+        assert!(valid);
+        assert!(!collisions);
     }
 
     #[test]
@@ -702,7 +713,10 @@ mod tests {
         };
         // Fails because a dropped element is not in the original log
         let elems_ref = elems.iter().collect::<Vec<_>>();
-        assert!(!check_digest_from_removed_set(&d, elems_ref, removed));
+        let (valid, collisions) =
+            check_digest_from_removed_set(&d, elems_ref, removed);
+        assert!(!valid);
+        assert!(!collisions);
     }
 
     #[test]
@@ -729,7 +743,10 @@ mod tests {
             the remove set (the property is also enforced because the elems \
             eliminated from the IBLT must be unique).");
         let elems_ref = elems.iter().collect::<Vec<_>>();
-        assert!(check_digest_from_removed_set(&d, elems_ref, removed));
+        let (valid, collisions) =
+            check_digest_from_removed_set(&d, elems_ref, removed);
+        assert!(valid);
+        assert!(!collisions);
     }
 
     #[test]
@@ -759,7 +776,10 @@ mod tests {
             in the remove set (the property is also enforced because the elems \
             eliminated from the IBLT must be unique).");
         let elems_ref = elems.iter().collect::<Vec<_>>();
-        assert!(check_digest_from_removed_set(&d, elems_ref, removed));
+        let (valid, collisions) =
+            check_digest_from_removed_set(&d, elems_ref, removed);
+        assert!(valid);
+        assert!(collisions);
     }
 
     #[test]

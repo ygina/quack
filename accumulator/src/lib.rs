@@ -13,11 +13,17 @@ pub use power_sum::PowerSumAccumulator;
 pub enum ValidationResult {
     Valid,
     Invalid,
+    PsumCollisionsValid,
+    PsumCollisionsInvalid,
     PsumExceedsThreshold,
     PsumErrorFindingRoots,
     IbltBenignWraparound,
+    IbltCollisionsValid,
+    IbltCollisionsInvalid,
     IbltIlpValid,
     IbltIlpInvalid,
+    IbltIlpCollisionsValid,
+    IbltIlpCollisionsInvalid,
     IbltMaliciousWraparound,
 }
 
@@ -25,7 +31,10 @@ impl ValidationResult {
     pub fn is_valid(&self) -> bool {
         match self {
             ValidationResult::Valid => true,
+            ValidationResult::PsumCollisionsValid => true,
             ValidationResult::IbltIlpValid => true,
+            ValidationResult::IbltCollisionsValid => true,
+            ValidationResult::IbltIlpCollisionsValid => true,
             _ => false,
         }
     }
@@ -34,6 +43,30 @@ impl ValidationResult {
         match self {
             ValidationResult::PsumExceedsThreshold => true,
             ValidationResult::IbltBenignWraparound => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_collisions(&self) -> bool {
+        match self {
+            ValidationResult::PsumCollisionsValid => true,
+            ValidationResult::PsumCollisionsInvalid => true,
+            ValidationResult::IbltCollisionsValid => true,
+            ValidationResult::IbltCollisionsInvalid => true,
+            ValidationResult::IbltIlpCollisionsValid => true,
+            ValidationResult::IbltIlpCollisionsInvalid => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ilp(&self) -> bool {
+        match self {
+            ValidationResult::IbltCollisionsValid => true,
+            ValidationResult::IbltCollisionsInvalid => true,
+            ValidationResult::IbltIlpValid => true,
+            ValidationResult::IbltIlpInvalid => true,
+            ValidationResult::IbltIlpCollisionsValid => true,
+            ValidationResult::IbltIlpCollisionsInvalid => true,
             _ => false,
         }
     }

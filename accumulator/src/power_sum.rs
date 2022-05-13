@@ -459,15 +459,17 @@ impl Accumulator for PowerSumAccumulator {
             }
             n_digests += 1;
             if digest.equals(&self.digest) {
-                return ValidationResult::Valid;
+                return ValidationResult::PsumCollisionsValid;
             }
         }
         let t8 = Instant::now();
         debug!("recalculated {} digests: {:?}", n_digests, t8 - t7);
         if digest.equals(&self.digest) {
             ValidationResult::Valid
-        } else {
+        } else if n_digests == 0 {
             ValidationResult::Invalid
+        } else {
+            ValidationResult::PsumCollisionsInvalid
         }
     }
 }
