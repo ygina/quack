@@ -24,7 +24,7 @@ template <typename T_NARROW, typename T_WIDE,
           T_NARROW MODULUS, std::size_t SIZE>
 class PowerSumAccumulator {
 
-    static_assert(SIZE > 0);
+    static_assert(SIZE > 0, "Size of a PowerSumAccumulator must be nonzero");
 
     using ModInt = ModularInteger<T_NARROW, T_WIDE, MODULUS>;
 

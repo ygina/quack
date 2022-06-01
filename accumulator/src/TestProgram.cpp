@@ -83,6 +83,7 @@ int main() {
 
     std::uint64_t num_successful_recoveries = 0;
     std::uint64_t num_erroneous_recoveries = 0;
+    std::uint64_t num_extra_packets_sent = 0;
     std::uint64_t num_correct_failures = 0;
 
     while (true) {
@@ -161,6 +162,8 @@ int main() {
             // re-sent due to hash collisions.)
             if (is_subset(sent_packets, received_packets)) {
                 ++num_successful_recoveries;
+                num_extra_packets_sent += received_packets.size() -
+                                          sent_packets.size();
             } else {
                 ++num_erroneous_recoveries;
             }
@@ -183,10 +186,12 @@ int main() {
                                          num_erroneous_recoveries +
                                          num_correct_failures;
         if (num_trials % 5000 == 0) {
-            std::cout << "Completed " << num_trials << " trials ["
-                      << num_successful_recoveries << " successful recoveries, "
+            std::cout << "Completed " << num_trials << " trials: "
+                      << num_successful_recoveries << " successful recoveries ["
+                      << static_cast<double>(num_extra_packets_sent) / num_successful_recoveries
+                      << " extra packets sent on average], "
                       << num_erroneous_recoveries << " erroneous recoveries, "
-                      << num_correct_failures << " correct failures]."
+                      << num_correct_failures << " correct failures."
                       << std::endl;
         }
 
