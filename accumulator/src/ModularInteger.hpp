@@ -110,7 +110,7 @@ struct ModularInteger {
         }
     }
 
-    consteval ModularInteger inv() const noexcept {
+    constexpr ModularInteger inv() const noexcept {
         return pow<(MODULUS - 2)>();
     }
 

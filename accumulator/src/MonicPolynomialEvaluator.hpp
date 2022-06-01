@@ -1,23 +1,48 @@
 #ifndef MONIC_POLYNOMIAL_EVALUATOR_HPP_INCLUDED
 #define MONIC_POLYNOMIAL_EVALUATOR_HPP_INCLUDED
 
-#include <array>   // for std::array
 #include <cstddef> // for std::size_t
 #include <cstdint> // for std::uint*_t
+#include <vector>  // for std::vector
 
 #include "ModularInteger.hpp" // for ModularInteger
 
 
-template <typename T_NARROW, typename T_WIDE,
-          T_NARROW MODULUS, std::size_t SIZE>
+template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
 constexpr std::size_t count_trailing_zeros(
-    const std::array<ModularInteger<T_NARROW, T_WIDE, MODULUS>, SIZE> &coeffs
+    const std::vector<ModularInteger<T_NARROW, T_WIDE, MODULUS>> &coeffs
 ) noexcept {
+    const std::size_t size = coeffs.size();
     std::size_t result = 0;
-    std::size_t i = SIZE - 1;
-    while (i < SIZE && !coeffs[i--]) { ++result; }
+    std::size_t i = size - 1;
+    while (i < size && !coeffs[i--]) { ++result; }
     return result;
 }
+
+
+template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
+struct MonicPolynomialEvaluator {
+
+    using ModInt = ModularInteger<T_NARROW, T_WIDE, MODULUS>;
+
+    static constexpr ModInt eval(
+        const std::vector<ModInt> &coeffs,
+        T_NARROW x
+    ) noexcept {
+        const std::size_t size = coeffs.size();
+        const ModularInteger<T_NARROW, T_WIDE, MODULUS> x_mod(x);
+        ModularInteger<T_NARROW, T_WIDE, MODULUS> result = x_mod;
+        for (std::size_t i = 0; i < size - 1; ++i) {
+            result += coeffs[i];
+            result *= x_mod;
+        }
+        return result + coeffs[size - 1];
+    }
+
+}; // struct MonicPolynomialEvaluator
+
+
+#ifdef USE_LOOKUP_TABLE_16
 
 
 template <typename T_NARROW, typename T_WIDE,
@@ -49,28 +74,6 @@ consteval std::array<
 }
 
 
-template <typename T_NARROW, typename T_WIDE,
-          T_NARROW MODULUS, std::size_t SIZE>
-struct MonicPolynomialEvaluator {
-
-    using ModInt = ModularInteger<T_NARROW, T_WIDE, MODULUS>;
-
-    static constexpr ModInt eval(
-        const std::array<ModInt, SIZE> &coeffs,
-        T_NARROW x
-    ) noexcept {
-        const ModularInteger<T_NARROW, T_WIDE, MODULUS> x_mod(x);
-        ModularInteger<T_NARROW, T_WIDE, MODULUS> result = x_mod;
-        for (std::size_t i = 0; i < SIZE - 1; ++i) {
-            result += coeffs[i];
-            result *= x_mod;
-        }
-        return result + coeffs[SIZE - 1];
-    }
-
-}; // struct MonicPolynomialEvaluator
-
-
 template <std::uint16_t MODULUS, std::size_t SIZE>
 struct MonicPolynomialEvaluator<std::uint16_t, std::uint32_t, MODULUS, SIZE> {
 
@@ -94,6 +97,9 @@ struct MonicPolynomialEvaluator<std::uint16_t, std::uint32_t, MODULUS, SIZE> {
     }
 
 }; // struct MonicPolynomialEvaluator
+
+
+#endif // USE_LOOKUP_TABLE_16
 
 
 #endif // MONIC_POLYNOMIAL_EVALUATOR_HPP_INCLUDED
