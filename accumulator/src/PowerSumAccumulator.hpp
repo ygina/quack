@@ -38,9 +38,6 @@ public:
         }
     }
 
-    constexpr PowerSumAccumulator(const PowerSumAccumulator &other) noexcept :
-        inverse_table(other.inverse_table), power_sums(other.power_sums) {}
-
     constexpr void insert(T_NARROW value) noexcept {
         const std::size_t size = power_sums.size();
         const ModInt x{value};
@@ -50,6 +47,18 @@ public:
             y *= x;
         }
         power_sums[size - 1] += y;
+    }
+
+    constexpr void insert(
+        const std::vector<ModInt> &power_tables,
+        std::size_t table_size,
+        T_NARROW value
+    ) noexcept {
+        const ModInt *power_table = power_tables.data() + (table_size * value);
+        const std::size_t size = power_sums.size();
+        for (std::size_t i = 0; i < size; ++i) {
+            power_sums[i] += ModInt(power_table[i]);
+        }
     }
 
     constexpr void clear() noexcept {
