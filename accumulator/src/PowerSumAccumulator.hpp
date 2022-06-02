@@ -69,9 +69,10 @@ public:
         return *this;
     }
 
-    constexpr std::vector<ModInt> to_polynomial_coefficients() const noexcept {
-        const std::size_t size = power_sums.size();
-        std::vector<ModInt> coeffs(size);
+    constexpr void to_polynomial_coefficients(
+        std::vector<ModInt> &coeffs
+    ) const noexcept {
+        const std::size_t size = coeffs.size();
         coeffs[0] = -power_sums[0];
         for (std::size_t i = 1; i < size; ++i) {
             for (std::size_t j = 0; j < i; ++j) {
@@ -80,7 +81,6 @@ public:
             coeffs[i] -= power_sums[i];
             coeffs[i] *= inverse_table[i];
         }
-        return coeffs;
     }
 
 }; // class PowerSumAccumulator
