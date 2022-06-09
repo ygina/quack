@@ -121,11 +121,6 @@ void run_insertion_benchmark(std::size_t max_size, std::size_t num_trials) {
 }
 
 
-int main() {
-    run_insertion_benchmark(50, 100);
-}
-
-
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -215,24 +210,42 @@ void run_decode_benchmark(std::size_t size, std::size_t num_trials) {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-// int main(int argc, char **argv) {
+int main(int argc, char **argv) {
 
-//     std::size_t threshold = 32;
-//     std::size_t num_trials = 10;
+    std::size_t threshold = 32;
+    std::size_t num_trials = 10;
+    bool benchmark_insertion = false;
+    bool benchmark_decode = false;
 
-//     for (int i = 0; i < argc; ++i) {
-//         if (std::string(argv[i]) == "--threshold") {
-//             if (i + 1 < argc) {
-//                 threshold = std::stoull(argv[i + 1]);
-//                 ++i;
-//             }
-//         } else if (std::string(argv[i]) == "--trials") {
-//             if (i + 1 < argc) {
-//                 num_trials = std::stoull(argv[i + 1]);
-//                 ++i;
-//             }
-//         }
-//     }
+    for (int i = 0; i < argc; ++i) {
+        if (std::string(argv[i]) == "--threshold") {
+            if (i + 1 < argc) {
+                threshold = std::stoull(argv[i + 1]);
+                ++i;
+            }
+        } else if (std::string(argv[i]) == "--trials") {
+            if (i + 1 < argc) {
+                num_trials = std::stoull(argv[i + 1]);
+                ++i;
+            }
+        } else if (std::string(argv[i]) == "--insertion") {
+            benchmark_insertion = true;
+        } else if (std::string(argv[i]) == "--decode") {
+            benchmark_decode = true;
+        }
+    }
 
-//     run_decode_benchmark(threshold, num_trials);
-// }
+    if (benchmark_insertion ^ benchmark_decode) {
+        if (benchmark_insertion) {
+            run_insertion_benchmark(threshold, num_trials);
+        } else if (benchmark_decode) {
+            run_decode_benchmark(threshold, num_trials);
+        }
+    } else {
+        std::cout << "Usage: " << argv[0] << " [--threshold <threshold>] "
+                  << "[--trials <num_trials>] [--insertion] [--decode]"
+                  << std::endl;
+    }
+
+    return 0;
+}
