@@ -140,6 +140,7 @@ void run_insertion_benchmark(
 template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
 void benchmark_decode(
     std::size_t size,
+    std::size_t num_packets,
     std::size_t num_drop,
     std::size_t num_trials
 ) {
@@ -155,10 +156,12 @@ void benchmark_decode(
     using evaluator = MonicPolynomialEvaluator<T_NARROW, T_WIDE, MODULUS>;
 
     for (std::size_t i = 0; i < num_trials + 1; ++i) {
+        // Allocate variable for counting false positives.
+        std::size_t fp = 0;
 
         // Generate 1000 random numbers.
         std::vector<T_NARROW> numbers;
-        for (std::size_t j = 0; j < 1000; ++j) {
+        for (std::size_t j = 0; j < num_packets; ++j) {
             numbers.push_back(dist(gen));
         }
 
@@ -167,10 +170,12 @@ void benchmark_decode(
         PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc_2(size);
 
         // Insert all random numbers into the first accumulator.
-        for (std::size_t j = 0; j < 1000; ++j) { acc_1.insert(numbers[j]); }
+        for (std::size_t j = 0; j < num_packets; ++j) {
+            acc_1.insert(numbers[j]);
+        }
 
         // Insert all but num_drop random numbers into the second accumulator.
-        for (std::size_t j = 0; j < 1000 - num_drop; ++j) {
+        for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
             acc_2.insert(numbers[j]);
         }
 
@@ -181,11 +186,12 @@ void benchmark_decode(
         if (num_drop > 0) {
             acc_1 -= acc_2;
             acc_1.to_polynomial_coefficients(coeffs);
-            for (std::size_t j = 0; j < 1000 - num_drop; ++j) {
+            for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
                 const auto value = evaluator::eval(coeffs, numbers[j]);
+                if (!value) fp++;
                 do_not_discard(value);
             }
-            for (std::size_t j = 1000 - num_drop; j < 1000; ++j) {
+            for (std::size_t j = num_packets - num_drop; j < num_packets; ++j) {
                 const auto value = evaluator::eval(coeffs, numbers[j]);
                 assert(!value);
                 do_not_discard(value);
@@ -196,6 +202,8 @@ void benchmark_decode(
         if (i > 0) {
             print_timer("Decode time (" + std::string(TYPE_NAME<T_NARROW>) +
                         ", threshold = " + std::to_string(size) +
+                        ", num_packets = " + std::to_string(num_packets) +
+                        ", false_positives = " + std::to_string(fp) +
                         ", dropped = " + std::to_string(num_drop) + ")");
         }
     }
@@ -206,23 +214,18 @@ void run_decode_benchmark(
     std::size_t threshold,
     std::size_t num_packets,
     std::size_t num_bits_id,
+    std::size_t num_drop,
     std::size_t num_trials
 ) {
     if (num_bits_id == 16) {
-        for (std::size_t i = 0; i <= threshold; ++i) {
-            benchmark_decode<std::uint16_t, std::uint32_t,
-                         UINT16_C(65'521)>(threshold, i, num_trials);
-        }
+        benchmark_decode<std::uint16_t, std::uint32_t,
+            UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 32) {
-        for (std::size_t i = 0; i <= threshold; ++i) {
-            benchmark_decode<std::uint32_t, std::uint64_t,
-                         UINT32_C(4'294'967'291)>(threshold, i, num_trials);
-        }
+        benchmark_decode<std::uint32_t, std::uint64_t,
+            UINT32_C(4'294'967'291)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 64) {
-        for (std::size_t i = 0; i <= threshold; ++i) {
-            benchmark_decode<std::uint64_t, __uint128_t,
-                         UINT64_C(18'446'744'073'709'551'557)>(threshold, i, num_trials);
-        }
+        benchmark_decode<std::uint64_t, __uint128_t,
+            UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_drop, num_trials);
     } else {
         std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
         return;
@@ -238,6 +241,7 @@ int main(int argc, char **argv) {
     std::size_t threshold = 20;
     std::size_t num_packets = 1000;
     std::size_t num_bits_id = 16;
+    std::size_t num_drop = threshold;
     std::size_t num_trials = 1;
     bool benchmark_insertion = false;
     bool benchmark_decode = false;
@@ -246,6 +250,7 @@ int main(int argc, char **argv) {
         if (std::string(argv[i]) == "-t") {
             if (i + 1 < argc) {
                 threshold = std::stoull(argv[i + 1]);
+                num_drop = threshold;
                 ++i;
             }
         } else if (std::string(argv[i]) == "-n") {
@@ -261,6 +266,11 @@ int main(int argc, char **argv) {
         } else if (std::string(argv[i]) == "--trials") {
             if (i + 1 < argc) {
                 num_trials = std::stoull(argv[i + 1]);
+                ++i;
+            }
+        } else if (std::string(argv[i]) == "--dropped") {
+            if (i + 1 < argc) {
+                num_drop = std::stoull(argv[i + 1]);
                 ++i;
             }
         } else if (std::string(argv[i]) == "--insertion") {
@@ -283,12 +293,14 @@ int main(int argc, char **argv) {
                 threshold,
                 num_packets,
                 num_bits_id,
+                num_drop,
                 num_trials
             );
         }
     } else {
         std::cout << "Usage: " << argv[0] << " [-t <threshold>] "
                   << "[-n <num_packets>] " << "[-b <num_bits_id>] "
+                  << "[--dropped <num_drop>] "
                   << "[--trials <num_trials>] [--insertion] [--decode]"
                   << std::endl;
     }
