@@ -26,6 +26,7 @@ class PowerSumAccumulator {
 
     std::vector<ModInt> inverse_table;
     std::vector<ModInt> power_sums;
+    std::uint16_t count;
 
 public:
 
@@ -36,6 +37,7 @@ public:
         for (std::size_t i = 0; i < size; ++i) {
             power_sums[i] = ModInt();
         }
+        count = 0;
     }
 
     constexpr void insert(T_NARROW value) noexcept {
@@ -47,6 +49,7 @@ public:
             y *= x;
         }
         power_sums[size - 1] += y;
+        count++;
     }
 
     constexpr void insert(
@@ -59,6 +62,7 @@ public:
         for (std::size_t i = 0; i < size; ++i) {
             power_sums[i] += ModInt(power_table[i]);
         }
+        count++;
     }
 
     constexpr void clear() noexcept {
@@ -66,6 +70,7 @@ public:
         for (std::size_t i = 0; i < size; ++i) {
             power_sums[i] = ModInt();
         }
+        count = 0;
     }
 
     constexpr PowerSumAccumulator &operator-=(
@@ -75,6 +80,7 @@ public:
         for (std::size_t i = 0; i < size; ++i) {
             power_sums[i] -= other.power_sums[i];
         }
+        count -= other.count;
         return *this;
     }
 
