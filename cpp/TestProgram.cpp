@@ -30,12 +30,26 @@ static void end_timer() {
 }
 
 
-static void print_timer(const std::string &message) {
+static auto print_timer(const std::string &message) {
     using std::chrono::nanoseconds;
     const auto duration = std::chrono::duration_cast<nanoseconds>(
         end_time - begin_time
     ).count();
     std::cout << message << ": " << duration << " ns" << std::endl;
+    return duration;
+}
+
+static void print_summary(std::vector<uint32_t> d) {
+    uint32_t avg;
+    if (d.empty()) {
+        avg = 0;
+    } else {
+        avg = std::reduce(d.begin(), d.end(), 0.0) / d.size();
+    }
+    std::cout << "SUMMARY: "
+              << "num_trials = " << std::to_string(d.size())
+              << ", avg = " << std::to_string(avg) << " ns"
+              << std::endl;
 }
 
 
@@ -62,7 +76,11 @@ static const auto power_tables = power_tables_16<UINT16_C(65'521)>(50);
 
 // How long does it take to insert a number into a PowerSumAccumulator?
 template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
-void benchmark_insertion(std::size_t size, std::size_t num_trials) {
+void benchmark_insertion(
+    std::size_t size,
+    std::size_t num_packets,
+    std::size_t num_trials
+) {
 
     // Initialize C++ PRNG.
     std::random_device rd;
@@ -72,11 +90,14 @@ void benchmark_insertion(std::size_t size, std::size_t num_trials) {
         std::numeric_limits<T_NARROW>::max()
     );
 
+    // Allocate buffer for benchmark durations.
+    std::vector<uint32_t> durations;
+
     for (std::size_t i = 0; i < num_trials + 1; ++i) {
 
-        // Generate 1010 random numbers.
+        // Generate <num_packets> + 10 random numbers.
         std::vector<T_NARROW> numbers;
-        for (std::size_t j = 0; j < 1010; ++j) {
+        for (std::size_t j = 0; j < num_packets + 10; ++j) {
             numbers.push_back(dist(gen));
         }
 
@@ -84,24 +105,27 @@ void benchmark_insertion(std::size_t size, std::size_t num_trials) {
         PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc(size);
 
         // Warm up the instruction cache by inserting a few numbers.
-        for (std::size_t i = 1000; i < 1010; ++i) {
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
             acc.insert(numbers[i]);
         }
 
         // Insert a bunch of random numbers into the accumulator.
         begin_timer();
-        for (std::size_t j = 0; j < 1000; ++j) {
+        for (std::size_t j = 0; j < num_packets; ++j) {
             acc.insert(numbers[i]);
             do_not_discard(acc);
         }
         end_timer();
 
         if (i > 0) {
-            print_timer("Insert 1000 numbers into PowerSumAccumulator (" +
+            auto duration = print_timer("Insert " + std::to_string(num_packets)
+                        + " numbers into PowerSumAccumulator (" +
                         std::string(TYPE_NAME<T_NARROW>) + ", threshold = " +
                         std::to_string(size) + ")");
+            durations.push_back(duration);
         }
     }
+    print_summary(durations);
 }
 
 
@@ -112,20 +136,14 @@ void run_insertion_benchmark(
     std::size_t num_trials
 ) {
     if (num_bits_id == 16) {
-        for (std::size_t i = 1; i <= threshold; ++i) {
-            benchmark_insertion<std::uint16_t, std::uint32_t,
-                            UINT16_C(65'521)>(i, num_trials);
-        }
+        benchmark_insertion<std::uint16_t, std::uint32_t,
+            UINT16_C(65'521)>(threshold, num_packets, num_trials);
     } else if (num_bits_id == 32) {
-        for (std::size_t i = 1; i <= threshold; ++i) {
-            benchmark_insertion<std::uint32_t, std::uint64_t,
-                            UINT32_C(4'294'967'291)>(i, num_trials);
-        }
+        benchmark_insertion<std::uint32_t, std::uint64_t,
+            UINT32_C(4'294'967'291)>(threshold, num_packets, num_trials);
     } else if (num_bits_id == 64) {
-        for (std::size_t i = 1; i <= threshold; ++i) {
-            benchmark_insertion<std::uint64_t, __uint128_t,
-                            UINT64_C(18'446'744'073'709'551'557)>(i, num_trials);
-        }
+        benchmark_insertion<std::uint64_t, __uint128_t,
+            UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_trials);
     } else {
         std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
     }
@@ -152,6 +170,9 @@ void benchmark_decode(
         std::numeric_limits<T_NARROW>::min(),
         std::numeric_limits<T_NARROW>::max()
     );
+
+    // Allocate buffer for benchmark durations.
+    std::vector<uint32_t> durations;
 
     using evaluator = MonicPolynomialEvaluator<T_NARROW, T_WIDE, MODULUS>;
 
@@ -182,6 +203,9 @@ void benchmark_decode(
         // Pre-allocate buffer for polynomial coefficients.
         std::vector<ModularInteger<T_NARROW, T_WIDE, MODULUS>> coeffs(num_drop);
 
+        // Allocate buffer for missing packets.
+        std::vector<T_NARROW> dropped;
+
         begin_timer();
         if (num_drop > 0) {
             acc_1 -= acc_2;
@@ -195,18 +219,24 @@ void benchmark_decode(
                 const auto value = evaluator::eval(coeffs, numbers[j]);
                 assert(!value);
                 do_not_discard(value);
+                dropped.push_back(numbers[j]);
             }
         }
+        do_not_discard(dropped);
         end_timer();
 
         if (i > 0) {
-            print_timer("Decode time (" + std::string(TYPE_NAME<T_NARROW>) +
+            auto duration =
+                print_timer("Decode time (" + std::string(TYPE_NAME<T_NARROW>) +
                         ", threshold = " + std::to_string(size) +
                         ", num_packets = " + std::to_string(num_packets) +
                         ", false_positives = " + std::to_string(fp) +
                         ", dropped = " + std::to_string(num_drop) + ")");
+            durations.push_back(duration);
         }
     }
+
+    print_summary(durations);
 }
 
 
