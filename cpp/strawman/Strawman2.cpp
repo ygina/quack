@@ -6,8 +6,8 @@
 #include <limits>        // for std::numeric_limits
 #include <random>        // for std::random_device, std::mt19937_64
 #include <string>        // for std::string
-#include <unordered_map> // for std::unordered_map
 #include <vector>        // for std::vector
+#include <algorithm>     // for std::min
 
 /* Include the GCC super header */
 #if defined(__GNUC__)
@@ -49,7 +49,7 @@ static auto print_timer(const std::string &message) {
     return duration;
 }
 
-static void print_summary(std::vector<uint32_t> d) {
+static uint32_t print_summary(std::vector<uint32_t> d) {
     uint32_t avg;
     if (d.empty()) {
         avg = 0;
@@ -60,6 +60,7 @@ static void print_summary(std::vector<uint32_t> d) {
               << "num_trials = " << std::to_string(d.size())
               << ", avg = " << std::to_string(avg) << " ns"
               << std::endl;
+    return avg;
 }
 
 
@@ -362,6 +363,12 @@ void run_insertion_benchmark(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define NUM_SUBSETS_LIMIT 10000
+
+std::size_t choose(std::size_t n, std::size_t k) {
+    if (k == 0) return 1;
+    return (n * choose(n - 1, k - 1)) / k;
+}
 
 // How long does it take to compute the set-theoretic difference between two
 // PowerSumAccumulators, assuming one is a subset of the other?
@@ -383,6 +390,9 @@ void benchmark_decode(
     // Allocate buffer for benchmark durations.
     std::vector<uint32_t> durations;
 
+    // Calculate the number of subsets.
+    std::size_t num_subsets = choose(num_packets, num_drop);
+
     for (std::size_t i = 0; i < num_trials + 1; ++i) {
         // Generate 1000 random numbers.
         std::vector<T_NUM_BITS> numbers;
@@ -396,7 +406,6 @@ void benchmark_decode(
             0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
             0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
         };
-
         for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
             std::memcpy(value, &numbers[i], NUM_BYTES);
             sha256_process_x86(state, value, NUM_BYTES);
@@ -404,10 +413,26 @@ void benchmark_decode(
 
         begin_timer();
         if (num_drop > 0) {
-            // TODO
-            // For every subset of size "num_packets - num_drop"
-            // Calculate the SHA256 hash
-            // Do this num_subsets / 2 times to calculate the expected time
+            // Do this num_subsets / 2 times to calculate the expected time.
+            // But actually just calculate how many can be done in 30 seconds
+            // and extrapolate.
+            std::size_t num_hashes_to_calculate =
+                std::min((std::size_t)NUM_SUBSETS_LIMIT, num_subsets / 2);
+            for (std::size_t i = 0; i < num_hashes_to_calculate; i++) {
+                // For every subset of size "num_packets - num_drop"
+                // Calculate the SHA256 hash
+                uint32_t state[8] = {
+                    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+                };
+                // We're really just measuring a lower bound of the time to
+                // compute any SHA256 hash with this number of elements
+                for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
+                    std::memcpy(value, &numbers[i], NUM_BYTES);
+                    sha256_process_x86(state, value, NUM_BYTES);
+                }
+                do_not_discard(state);
+            }
         }
         end_timer();
 
@@ -419,7 +444,17 @@ void benchmark_decode(
             durations.push_back(duration);
         }
     }
-    print_summary(durations);
+    uint32_t avg = print_summary(durations);
+    if (num_subsets / 2 > NUM_SUBSETS_LIMIT) {
+        std::cout << "Only calculated " << std::to_string(NUM_SUBSETS_LIMIT)
+                  << " hashes, expected " << std::to_string(num_subsets / 2)
+                  << " extrapolating -> ";
+        avg /= NUM_SUBSETS_LIMIT;
+        avg *= num_subsets / 2;
+        // std::cout << avg * num_subsets / 2 / NUM_SUBSETS_LIMIT / 1'000'000'000
+        std::cout << avg * num_subsets / NUM_SUBSETS_LIMIT / 2'000'000'000
+                  << " s" << std::endl;
+    }
 }
 
 void run_decode_benchmark(
@@ -452,9 +487,13 @@ int main(int argc, char **argv) {
     std::size_t num_trials = 10;
     bool benchmark_insertion = false;
     bool benchmark_decode = false;
+    bool help = false;
 
     for (int i = 0; i < argc; ++i) {
-        if (std::string(argv[i]) == "-n") {
+        if (std::string(argv[i]) == "-h" || std::string(argv[i]) == "help") {
+            help = true;
+            break;
+        } else if (std::string(argv[i]) == "-n") {
             if (i + 1 < argc) {
                 num_packets = std::stoull(argv[i + 1]);
                 ++i;
@@ -481,7 +520,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (benchmark_insertion ^ benchmark_decode) {
+    if ((benchmark_insertion ^ benchmark_decode) && !help) {
         if (benchmark_insertion) {
             run_insertion_benchmark(
                 num_packets,
@@ -497,7 +536,7 @@ int main(int argc, char **argv) {
             );
         }
     } else {
-        std::cout << "Usage: " << argv[0] << "[-n <num_packets>] "
+        std::cout << "Usage: " << argv[0] << " [-n <num_packets>] "
                   << "[-b <num_bits_id>] " << "[--dropped <num_drop>] "
                   << "[--trials <num_trials>] [--insertion] [--decode]"
                   << std::endl;
