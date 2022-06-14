@@ -105,16 +105,21 @@ void benchmark_insertion(std::size_t size, std::size_t num_trials) {
 }
 
 
-void run_insertion_benchmark(std::size_t max_size, std::size_t num_trials) {
-    for (std::size_t i = 1; i <= max_size; ++i) {
+void run_insertion_benchmark(
+    std::size_t threshold,
+    std::size_t num_packets,
+    std::size_t num_bits_id,
+    std::size_t num_trials
+) {
+    for (std::size_t i = 1; i <= threshold; ++i) {
         benchmark_insertion<std::uint16_t, std::uint32_t,
                             UINT16_C(65'521)>(i, num_trials);
     }
-    for (std::size_t i = 1; i <= max_size; ++i) {
+    for (std::size_t i = 1; i <= threshold; ++i) {
         benchmark_insertion<std::uint32_t, std::uint64_t,
                             UINT32_C(4'294'967'291)>(i, num_trials);
     }
-    for (std::size_t i = 1; i <= max_size; ++i) {
+    for (std::size_t i = 1; i <= threshold; ++i) {
         benchmark_insertion<std::uint64_t, __uint128_t,
                             UINT64_C(18'446'744'073'709'551'557)>(i, num_trials);
     }
@@ -191,18 +196,23 @@ void benchmark_decode(
 }
 
 
-void run_decode_benchmark(std::size_t size, std::size_t num_trials) {
-    for (std::size_t i = 0; i <= size; ++i) {
+void run_decode_benchmark(
+    std::size_t threshold,
+    std::size_t num_packets,
+    std::size_t num_bits_id,
+    std::size_t num_trials
+) {
+    for (std::size_t i = 0; i <= threshold; ++i) {
         benchmark_decode<std::uint16_t, std::uint32_t,
-                         UINT16_C(65'521)>(size, i, num_trials);
+                         UINT16_C(65'521)>(threshold, i, num_trials);
     }
-    for (std::size_t i = 0; i <= size; ++i) {
+    for (std::size_t i = 0; i <= threshold; ++i) {
         benchmark_decode<std::uint32_t, std::uint64_t,
-                         UINT32_C(4'294'967'291)>(size, i, num_trials);
+                         UINT32_C(4'294'967'291)>(threshold, i, num_trials);
     }
-    for (std::size_t i = 0; i <= size; ++i) {
+    for (std::size_t i = 0; i <= threshold; ++i) {
         benchmark_decode<std::uint64_t, __uint128_t,
-                         UINT64_C(18'446'744'073'709'551'557)>(size, i, num_trials);
+                         UINT64_C(18'446'744'073'709'551'557)>(threshold, i, num_trials);
     }
 }
 
@@ -212,15 +222,27 @@ void run_decode_benchmark(std::size_t size, std::size_t num_trials) {
 
 int main(int argc, char **argv) {
 
-    std::size_t threshold = 32;
-    std::size_t num_trials = 10;
+    std::size_t threshold = 20;
+    std::size_t num_packets = 1000;
+    std::size_t num_bits_id = 16;
+    std::size_t num_trials = 1;
     bool benchmark_insertion = false;
     bool benchmark_decode = false;
 
     for (int i = 0; i < argc; ++i) {
-        if (std::string(argv[i]) == "--threshold") {
+        if (std::string(argv[i]) == "-t") {
             if (i + 1 < argc) {
                 threshold = std::stoull(argv[i + 1]);
+                ++i;
+            }
+        } else if (std::string(argv[i]) == "-n") {
+            if (i + 1 < argc) {
+                num_packets = std::stoull(argv[i + 1]);
+                ++i;
+            }
+        } else if (std::string(argv[i]) == "-b") {
+            if (i + 1 < argc) {
+                num_bits_id = std::stoull(argv[i + 1]);
                 ++i;
             }
         } else if (std::string(argv[i]) == "--trials") {
@@ -237,12 +259,23 @@ int main(int argc, char **argv) {
 
     if (benchmark_insertion ^ benchmark_decode) {
         if (benchmark_insertion) {
-            run_insertion_benchmark(threshold, num_trials);
+            run_insertion_benchmark(
+                threshold,
+                num_packets,
+                num_bits_id,
+                num_trials
+            );
         } else if (benchmark_decode) {
-            run_decode_benchmark(threshold, num_trials);
+            run_decode_benchmark(
+                threshold,
+                num_packets,
+                num_bits_id,
+                num_trials
+            );
         }
     } else {
-        std::cout << "Usage: " << argv[0] << " [--threshold <threshold>] "
+        std::cout << "Usage: " << argv[0] << " [-t <threshold>] "
+                  << "[-n <num_packets>] " << "[-b <num_bits_id>] "
                   << "[--trials <num_trials>] [--insertion] [--decode]"
                   << std::endl;
     }
