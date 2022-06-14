@@ -111,17 +111,23 @@ void run_insertion_benchmark(
     std::size_t num_bits_id,
     std::size_t num_trials
 ) {
-    for (std::size_t i = 1; i <= threshold; ++i) {
-        benchmark_insertion<std::uint16_t, std::uint32_t,
+    if (num_bits_id == 16) {
+        for (std::size_t i = 1; i <= threshold; ++i) {
+            benchmark_insertion<std::uint16_t, std::uint32_t,
                             UINT16_C(65'521)>(i, num_trials);
-    }
-    for (std::size_t i = 1; i <= threshold; ++i) {
-        benchmark_insertion<std::uint32_t, std::uint64_t,
+        }
+    } else if (num_bits_id == 32) {
+        for (std::size_t i = 1; i <= threshold; ++i) {
+            benchmark_insertion<std::uint32_t, std::uint64_t,
                             UINT32_C(4'294'967'291)>(i, num_trials);
-    }
-    for (std::size_t i = 1; i <= threshold; ++i) {
-        benchmark_insertion<std::uint64_t, __uint128_t,
+        }
+    } else if (num_bits_id == 64) {
+        for (std::size_t i = 1; i <= threshold; ++i) {
+            benchmark_insertion<std::uint64_t, __uint128_t,
                             UINT64_C(18'446'744'073'709'551'557)>(i, num_trials);
+        }
+    } else {
+        std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
     }
 }
 
@@ -202,17 +208,24 @@ void run_decode_benchmark(
     std::size_t num_bits_id,
     std::size_t num_trials
 ) {
-    for (std::size_t i = 0; i <= threshold; ++i) {
-        benchmark_decode<std::uint16_t, std::uint32_t,
+    if (num_bits_id == 16) {
+        for (std::size_t i = 0; i <= threshold; ++i) {
+            benchmark_decode<std::uint16_t, std::uint32_t,
                          UINT16_C(65'521)>(threshold, i, num_trials);
-    }
-    for (std::size_t i = 0; i <= threshold; ++i) {
-        benchmark_decode<std::uint32_t, std::uint64_t,
+        }
+    } else if (num_bits_id == 32) {
+        for (std::size_t i = 0; i <= threshold; ++i) {
+            benchmark_decode<std::uint32_t, std::uint64_t,
                          UINT32_C(4'294'967'291)>(threshold, i, num_trials);
-    }
-    for (std::size_t i = 0; i <= threshold; ++i) {
-        benchmark_decode<std::uint64_t, __uint128_t,
+        }
+    } else if (num_bits_id == 64) {
+        for (std::size_t i = 0; i <= threshold; ++i) {
+            benchmark_decode<std::uint64_t, __uint128_t,
                          UINT64_C(18'446'744'073'709'551'557)>(threshold, i, num_trials);
+        }
+    } else {
+        std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
+        return;
     }
 }
 
