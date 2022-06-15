@@ -328,9 +328,10 @@ void benchmark_insertion(
         for (std::size_t j = 0; j < num_packets; ++j) {
             std::memcpy(value, &numbers[i], NUM_BYTES);
             sha256_process_x86(state, value, NUM_BYTES);
+            do_not_discard(state);
             count++;
         }
-        do_not_discard(state);
+        do_not_discard(count);
         end_timer();
 
         if (i > 0) {
