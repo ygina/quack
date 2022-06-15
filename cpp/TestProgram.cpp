@@ -79,6 +79,7 @@ template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
 void benchmark_insertion(
     std::size_t size,
     std::size_t num_packets,
+    std::size_t num_drop,
     std::size_t num_trials
 ) {
 
@@ -97,29 +98,32 @@ void benchmark_insertion(
 
         // Generate <num_packets> + 10 random numbers.
         std::vector<T_NARROW> numbers;
-        for (std::size_t j = 0; j < num_packets + 10; ++j) {
+        // for (std::size_t j = 0; j < num_packets + 10; ++j)
+        for (std::size_t j = 0; j < num_packets; ++j)
             numbers.push_back(dist(gen));
-        }
 
-        // Construct an empty PowerSumAccumulator.
-        PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc(size);
+        // Construct two empty PowerSumAccumulators.
+        PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc1(size);
+        PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc2(size);
 
-        // Warm up the instruction cache by inserting a few numbers.
-        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
-            acc.insert(numbers[i]);
-        }
+        // // Warm up the instruction cache by inserting a few numbers.
+        // for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+        //     acc1.insert(numbers[i]);
+        // }
 
         // Insert a bunch of random numbers into the accumulator.
         begin_timer();
-        for (std::size_t j = 0; j < num_packets; ++j) {
-            acc.insert(numbers[i]);
-            do_not_discard(acc);
-        }
+        for (std::size_t j = 0; j < num_packets; ++j)
+            acc1.insert(numbers[j]);
+        for (std::size_t j = 0; j < num_packets - num_drop; ++j)
+            acc2.insert(numbers[j]);
+        do_not_discard(acc1);
+        do_not_discard(acc2);
         end_timer();
 
         if (i > 0) {
             auto duration = print_timer("Insert " + std::to_string(num_packets)
-                        + " numbers into PowerSumAccumulator (" +
+                        + " numbers into 2 PowerSumAccumulators (" +
                         std::string(TYPE_NAME<T_NARROW>) + ", threshold = " +
                         std::to_string(size) + ")");
             durations.push_back(duration);
@@ -133,17 +137,18 @@ void run_insertion_benchmark(
     std::size_t threshold,
     std::size_t num_packets,
     std::size_t num_bits_id,
+    std::size_t num_drop,
     std::size_t num_trials
 ) {
     if (num_bits_id == 16) {
         benchmark_insertion<std::uint16_t, std::uint32_t,
-            UINT16_C(65'521)>(threshold, num_packets, num_trials);
+            UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 32) {
         benchmark_insertion<std::uint32_t, std::uint64_t,
-            UINT32_C(4'294'967'291)>(threshold, num_packets, num_trials);
+            UINT32_C(4'294'967'291)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 64) {
         benchmark_insertion<std::uint64_t, __uint128_t,
-            UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_trials);
+            UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_drop, num_trials);
     } else {
         std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
     }
@@ -272,7 +277,7 @@ int main(int argc, char **argv) {
     std::size_t num_packets = 1000;
     std::size_t num_bits_id = 16;
     std::size_t num_drop = threshold;
-    std::size_t num_trials = 1;
+    std::size_t num_trials = 10;
     bool benchmark_insertion = false;
     bool benchmark_decode = false;
 
@@ -316,6 +321,7 @@ int main(int argc, char **argv) {
                 threshold,
                 num_packets,
                 num_bits_id,
+                num_drop,
                 num_trials
             );
         } else if (benchmark_decode) {

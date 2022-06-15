@@ -363,7 +363,7 @@ void run_insertion_benchmark(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define NUM_SUBSETS_LIMIT 10000
+#define NUM_SUBSETS_LIMIT 1000000
 
 std::size_t choose(std::size_t n, std::size_t k) {
     if (k == 0) return 1;
@@ -444,16 +444,17 @@ void benchmark_decode(
             durations.push_back(duration);
         }
     }
-    uint32_t avg = print_summary(durations);
+    double total_ns = (double)print_summary(durations);
     if (num_subsets / 2 > NUM_SUBSETS_LIMIT) {
         std::cout << "Only calculated " << std::to_string(NUM_SUBSETS_LIMIT)
                   << " hashes, expected " << std::to_string(num_subsets / 2)
                   << " extrapolating -> ";
-        avg /= NUM_SUBSETS_LIMIT;
-        avg *= num_subsets / 2;
         // std::cout << avg * num_subsets / 2 / NUM_SUBSETS_LIMIT / 1'000'000'000
-        std::cout << avg * num_subsets / NUM_SUBSETS_LIMIT / 2'000'000'000
-                  << " s" << std::endl;
+        double ext_ns = total_ns / NUM_SUBSETS_LIMIT * (num_subsets / 2);
+        double ext_s = ext_ns / 1'000'000.0;
+        double ext_days = ext_s / 60.0 / 60.0 / 24.0;
+        std::cout << ext_ns << " ns = "
+                  << ext_days << " days" << std::endl;
     }
 }
 

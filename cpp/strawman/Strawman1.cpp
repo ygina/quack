@@ -64,6 +64,82 @@ template <> constexpr const char *TYPE_NAME<std::uint16_t> = "16-bit integers";
 template <> constexpr const char *TYPE_NAME<std::uint32_t> = "32-bit integers";
 template <> constexpr const char *TYPE_NAME<std::uint64_t> = "64-bit integers";
 
+////////////////////////////////////////////////////////////////////////////////
+
+
+// How long does it take to insert a number into a PowerSumAccumulator?
+template <typename T_BITS, unsigned long NUM_BYTES>
+void benchmark_insertion(
+    std::size_t num_packets,
+    std::size_t num_drop,
+    std::size_t num_trials
+) {
+
+    // Initialize C++ PRNG.
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<T_BITS> dist(
+        std::numeric_limits<T_BITS>::min(),
+        std::numeric_limits<T_BITS>::max()
+    );
+
+    // Allocate buffer for benchmark durations.
+    std::vector<uint32_t> durations;
+
+    for (std::size_t i = 0; i < num_trials + 1; ++i) {
+
+        // Generate <num_packets> random numbers.
+        std::vector<T_BITS> sender;
+        std::vector<T_BITS> receiver;
+        for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
+            sender.push_back(dist(gen));
+            receiver.push_back(dist(gen));
+        }
+        for (std::size_t j = num_packets - num_drop; j < num_packets; ++j) {
+            sender.push_back(dist(gen));
+        }
+
+        // Initialize buffers.
+        std::multiset<T_BITS> sender_mset;
+        std::multiset<T_BITS> receiver_mset;
+
+        // Insert all packets into their sets.
+        begin_timer();
+        for (std::size_t j = 0; j < sender.size(); j++)
+            sender_mset.insert(sender[j]);
+        for (std::size_t j = 0; j < receiver.size(); j++)
+            receiver_mset.insert(receiver[j]);
+        do_not_discard(sender_mset);
+        do_not_discard(receiver_mset);
+        end_timer();
+
+        if (i > 0) {
+            auto duration = print_timer("Insert " + std::to_string(num_packets)
+                        + " numbers into Strawman1 (" +
+                        std::string(TYPE_NAME<T_BITS>) + ")");
+            durations.push_back(duration);
+        }
+    }
+    print_summary(durations);
+}
+
+
+void run_insertion_benchmark(
+    std::size_t num_packets,
+    std::size_t num_bits_id,
+    std::size_t num_drop,
+    std::size_t num_trials
+) {
+    if (num_bits_id == 16) {
+        benchmark_insertion<std::uint16_t, 2>(num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 32) {
+        benchmark_insertion<std::uint32_t, 4>(num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 64) {
+        benchmark_insertion<std::uint64_t, 8>(num_packets, num_drop, num_trials);
+    } else {
+        std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -105,12 +181,14 @@ void benchmark_decode(
         std::multiset<T_BITS> receiver_mset;
         std::multiset<T_BITS> difference;
 
+        // Insert all packets into their sets.
+        for (std::size_t j = 0; j < sender.size(); j++)
+            sender_mset.insert(sender[j]);
+        for (std::size_t j = 0; j < receiver.size(); j++)
+            receiver_mset.insert(receiver[j]);
+
         begin_timer();
         if (num_drop > 0) {
-            for (std::size_t j = 0; j < sender.size(); j++)
-                sender_mset.insert(sender[j]);
-            for (std::size_t j = 0; j < receiver.size(); j++)
-                receiver_mset.insert(receiver[j]);
             std::set_difference(std::make_move_iterator(sender.begin()),
                                 std::make_move_iterator(sender.end()),
                                 receiver.begin(), receiver.end(),
@@ -160,6 +238,8 @@ int main(int argc, char **argv) {
     std::size_t num_bits_id = 16;
     std::size_t num_drop = 20;
     std::size_t num_trials = 10;
+    bool benchmark_insertion = false;
+    bool benchmark_decode = false;
     bool help = false;
 
     for (int i = 0; i < argc; ++i) {
@@ -186,16 +266,29 @@ int main(int argc, char **argv) {
                 num_drop = std::stoull(argv[i + 1]);
                 ++i;
             }
+        } else if (std::string(argv[i]) == "--insertion") {
+            benchmark_insertion = true;
+        } else if (std::string(argv[i]) == "--decode") {
+            benchmark_decode = true;
         }
     }
 
-    if (!help) {
-        run_decode_benchmark(
-            num_packets,
-            num_bits_id,
-            num_drop,
-            num_trials
-        );
+    if ((benchmark_insertion ^ benchmark_decode) && !help) {
+        if (benchmark_insertion) {
+            run_insertion_benchmark(
+                num_packets,
+                num_bits_id,
+                num_drop,
+                num_trials
+            );
+        } else if (benchmark_decode) {
+            run_decode_benchmark(
+                num_packets,
+                num_bits_id,
+                num_drop,
+                num_trials
+            );
+        }
     } else {
         std::cout << "Usage: " << argv[0] << "[-n <num_packets>] "
                   << "[-b <num_bits_id>] " << "[--dropped <num_drop>] "
