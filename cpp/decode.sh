@@ -12,7 +12,7 @@ do
 	for dropped in $(seq 0 1 20);
 	do
 		time_ns=$(./TestProgram -b $bits --dropped $dropped --decode \
-			$tables_flag | grep SUMMARY | awk '{print $7}')
+			--trials 100 $tables_flag | grep SUMMARY | awk '{print $7}')
 		time_us=$(($time_ns/1000))
 		echo "$dropped\t$time_us"
 	done
