@@ -72,7 +72,8 @@ template <> constexpr const char *TYPE_NAME<std::uint64_t> = "64-bit integers";
 
 
 #define MAX_POWER 50
-static const auto power_tables = power_tables_16<UINT16_C(65'521)>(MAX_POWER);
+static const auto power_tables_16 = gen_power_tables_16<
+    UINT16_C(65'521)>(MAX_POWER);
 
 
 // How long does it take to insert a number into a PowerSumAccumulator?
@@ -107,17 +108,20 @@ void benchmark_insertion_16(
         PowerSumAccumulator<std::uint16_t, uint32_t, MODULUS> acc1(size);
         PowerSumAccumulator<std::uint16_t, uint32_t, MODULUS> acc2(size);
 
-        // // Warm up the instruction cache by inserting a few numbers.
-        // for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
-        //     acc1.insert(numbers[i]);
-        // }
+        // Warm up the instruction cache by inserting a few numbers.
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+            acc1.insert(numbers[i]);
+        }
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+            acc2.insert(numbers[i]);
+        }
 
         // Insert a bunch of random numbers into the accumulator.
         begin_timer();
         for (std::size_t j = 0; j < num_packets; ++j)
-            acc1.insert(power_tables, MAX_POWER, numbers[j]);
+            acc1.insert(power_tables_16, MAX_POWER, numbers[j]);
         for (std::size_t j = 0; j < num_packets - num_drop; ++j)
-            acc2.insert(power_tables, MAX_POWER, numbers[j]);
+            acc2.insert(power_tables_16, MAX_POWER, numbers[j]);
         do_not_discard(acc1);
         do_not_discard(acc2);
         end_timer();
@@ -134,7 +138,71 @@ void benchmark_insertion_16(
 }
 
 
-template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
+template <std::uint32_t MODULUS>
+void benchmark_insertion_24(
+    std::size_t size,
+    std::size_t num_packets,
+    std::size_t num_drop,
+    std::size_t num_trials
+) {
+    static const auto power_tables_24 = gen_power_tables_24<
+        UINT32_C(16'777'049)>(MAX_POWER);
+
+    // Initialize C++ PRNG.
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<std::uint32_t> dist(
+        std::numeric_limits<std::uint32_t>::min(),
+        16777216 - 1
+    );
+
+    // Allocate buffer for benchmark durations.
+    std::vector<uint32_t> durations;
+
+    for (std::size_t i = 0; i < num_trials + 1; ++i) {
+
+        // Generate <num_packets> + 10 random numbers.
+        std::vector<std::uint32_t> numbers;
+        // for (std::size_t j = 0; j < num_packets + 10; ++j)
+        for (std::size_t j = 0; j < num_packets; ++j)
+            numbers.push_back(dist(gen));
+
+        // Construct two empty PowerSumAccumulators.
+        PowerSumAccumulator<std::uint32_t, uint64_t, MODULUS> acc1(size);
+        PowerSumAccumulator<std::uint32_t, uint64_t, MODULUS> acc2(size);
+
+        // Warm up the instruction cache by inserting a few numbers.
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+            acc1.insert(numbers[i]);
+        }
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+            acc2.insert(numbers[i]);
+        }
+
+        // Insert a bunch of random numbers into the accumulator.
+        begin_timer();
+        for (std::size_t j = 0; j < num_packets; ++j)
+            acc1.insert(power_tables_24, MAX_POWER, numbers[j]);
+        for (std::size_t j = 0; j < num_packets - num_drop; ++j)
+            acc2.insert(power_tables_24, MAX_POWER, numbers[j]);
+        do_not_discard(acc1);
+        do_not_discard(acc2);
+        end_timer();
+
+        if (i > 0) {
+            auto duration = print_timer("Insert " + std::to_string(num_packets)
+                        + " numbers into 2 PowerSumAccumulators (" +
+                        std::string(TYPE_NAME<std::uint32_t>) + ", threshold = " +
+                        std::to_string(size) + ")");
+            durations.push_back(duration);
+        }
+    }
+    print_summary(durations);
+}
+
+
+template <typename T_NARROW, typename T_WIDE, T_NARROW MAX_VALUE, T_NARROW
+MODULUS>
 void benchmark_insertion(
     std::size_t size,
     std::size_t num_packets,
@@ -147,7 +215,7 @@ void benchmark_insertion(
     std::mt19937_64 gen(rd());
     std::uniform_int_distribution<T_NARROW> dist(
         std::numeric_limits<T_NARROW>::min(),
-        std::numeric_limits<T_NARROW>::max()
+        MAX_VALUE
     );
 
     // Allocate buffer for benchmark durations.
@@ -165,10 +233,13 @@ void benchmark_insertion(
         PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc1(size);
         PowerSumAccumulator<T_NARROW, T_WIDE, MODULUS> acc2(size);
 
-        // // Warm up the instruction cache by inserting a few numbers.
-        // for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
-        //     acc1.insert(numbers[i]);
-        // }
+        // Warm up the instruction cache by inserting a few numbers.
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+            acc1.insert(numbers[i]);
+        }
+        for (std::size_t i = num_packets; i < num_packets + 10; ++i) {
+            acc2.insert(numbers[i]);
+        }
 
         // Insert a bunch of random numbers into the accumulator.
         begin_timer();
@@ -193,19 +264,32 @@ void benchmark_insertion(
 
 
 void run_insertion_benchmark(
+    std::size_t use_tables,
     std::size_t threshold,
     std::size_t num_packets,
     std::size_t num_bits_id,
     std::size_t num_drop,
     std::size_t num_trials
 ) {
-    if (num_bits_id == 16) {
-        benchmark_insertion_16<UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
+    if (num_bits_id == 16 && use_tables) {
+        benchmark_insertion_16<UINT16_C(65'521)>(
+            threshold, num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 16 && !use_tables) {
+        benchmark_insertion<std::uint16_t, std::uint32_t, UINT16_C(65'535),
+            UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 24 && use_tables) {
+        benchmark_insertion_24<UINT32_C(16'777'049)>(
+            threshold, num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 24 && !use_tables) {
+        benchmark_insertion<std::uint32_t, std::uint64_t, UINT32_C(16'777'215),
+            UINT32_C(16'777'049)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 32) {
         benchmark_insertion<std::uint32_t, std::uint64_t,
-            UINT32_C(4'294'967'291)>(threshold, num_packets, num_drop, num_trials);
+            std::numeric_limits<uint32_t>::max(), UINT32_C(4'294'967'291)>
+            (threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 64) {
         benchmark_insertion<std::uint64_t, __uint128_t,
+            std::numeric_limits<uint64_t>::max(),
             UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_drop, num_trials);
     } else {
         std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
@@ -218,8 +302,8 @@ void run_insertion_benchmark(
 
 // How long does it take to compute the set-theoretic difference between two
 // PowerSumAccumulators, assuming one is a subset of the other?
-template <typename T_NARROW, typename T_WIDE, T_NARROW MODULUS>
-void benchmark_decode(
+template <typename T_NARROW, typename T_WIDE, T_NARROW MAX_VALUE, T_NARROW
+MODULUS> void benchmark_decode(
     std::size_t size,
     std::size_t num_packets,
     std::size_t num_drop,
@@ -231,7 +315,7 @@ void benchmark_decode(
     std::mt19937_64 gen(rd());
     std::uniform_int_distribution<T_NARROW> dist(
         std::numeric_limits<T_NARROW>::min(),
-        std::numeric_limits<T_NARROW>::max()
+        MAX_VALUE
     );
 
     // Allocate buffer for benchmark durations.
@@ -359,12 +443,14 @@ void benchmark_decode_16(
             acc_1 -= acc_2;
             acc_1.to_polynomial_coefficients(coeffs);
             for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
-                const auto value = evaluator::eval(power_tables, MAX_POWER, coeffs, numbers[j]);
+                const auto value = evaluator::eval(power_tables_16,
+                    MAX_POWER, coeffs, numbers[j]);
                 if (!value) fp++;
                 do_not_discard(value);
             }
             for (std::size_t j = num_packets - num_drop; j < num_packets; ++j) {
-                const auto value = evaluator::eval(power_tables, MAX_POWER, coeffs, numbers[j]);
+                const auto value = evaluator::eval(power_tables_16,
+                    MAX_POWER, coeffs, numbers[j]);
                 assert(!value);
                 do_not_discard(value);
                 dropped.push_back(numbers[j]);
@@ -388,20 +474,122 @@ void benchmark_decode_16(
 }
 
 
+template <std::uint32_t MODULUS>
+void benchmark_decode_24(
+    std::size_t size,
+    std::size_t num_packets,
+    std::size_t num_drop,
+    std::size_t num_trials
+) {
+    static const auto power_tables_24 = gen_power_tables_24<
+        UINT32_C(16'777'049)>(MAX_POWER);
+
+    // Initialize C++ PRNG.
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<std::uint32_t> dist(
+        std::numeric_limits<std::uint32_t>::min(),
+        16777216 - 1
+    );
+
+    // Allocate buffer for benchmark durations.
+    std::vector<uint32_t> durations;
+
+    using evaluator = MonicPolynomialEvaluator<std::uint32_t, std::uint64_t, MODULUS>;
+
+    for (std::size_t i = 0; i < num_trials + 1; ++i) {
+        // Allocate variable for counting false positives.
+        std::size_t fp = 0;
+
+        // Generate 1000 random numbers.
+        std::vector<std::uint32_t> numbers;
+        for (std::size_t j = 0; j < num_packets; ++j) {
+            numbers.push_back(dist(gen));
+        }
+
+        // Construct two empty PowerSumAccumulators.
+        PowerSumAccumulator<std::uint32_t, std::uint64_t, MODULUS> acc_1(size);
+        PowerSumAccumulator<std::uint32_t, std::uint64_t, MODULUS> acc_2(size);
+
+        // Insert all random numbers into the first accumulator.
+        for (std::size_t j = 0; j < num_packets; ++j) {
+            acc_1.insert(numbers[j]);
+        }
+
+        // Insert all but num_drop random numbers into the second accumulator.
+        for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
+            acc_2.insert(numbers[j]);
+        }
+
+        // Pre-allocate buffer for polynomial coefficients.
+        std::vector<ModularInteger<std::uint32_t, std::uint64_t, MODULUS>> coeffs(num_drop);
+
+        // Allocate buffer for missing packets.
+        std::vector<std::uint32_t> dropped;
+
+        begin_timer();
+        if (num_drop > 0) {
+            acc_1 -= acc_2;
+            acc_1.to_polynomial_coefficients(coeffs);
+            for (std::size_t j = 0; j < num_packets - num_drop; ++j) {
+                const auto value = evaluator::eval(
+                   power_tables_24, MAX_POWER, coeffs, numbers[j]);
+                if (!value) fp++;
+                do_not_discard(value);
+            }
+            for (std::size_t j = num_packets - num_drop; j < num_packets; ++j) {
+                const auto value = evaluator::eval(
+                   power_tables_24, MAX_POWER, coeffs, numbers[j]);
+                assert(!value);
+                do_not_discard(value);
+                dropped.push_back(numbers[j]);
+            }
+        }
+        do_not_discard(dropped);
+        end_timer();
+
+        if (i > 0) {
+            auto duration =
+                print_timer("Decode time (" + std::string(TYPE_NAME<std::uint32_t>) +
+                        ", threshold = " + std::to_string(size) +
+                        ", num_packets = " + std::to_string(num_packets) +
+                        ", false_positives = " + std::to_string(fp) +
+                        ", dropped = " + std::to_string(num_drop) + ")");
+            durations.push_back(duration);
+        }
+    }
+
+    print_summary(durations);
+}
+
+
 void run_decode_benchmark(
+    std::size_t use_tables,
     std::size_t threshold,
     std::size_t num_packets,
     std::size_t num_bits_id,
     std::size_t num_drop,
     std::size_t num_trials
 ) {
-    if (num_bits_id == 16) {
-        benchmark_decode_16<UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
+    if (num_bits_id == 16 && use_tables) {
+        benchmark_decode_16<UINT16_C(65'521)>(
+            threshold, num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 16 && !use_tables) {
+        benchmark_decode<std::uint16_t, std::uint32_t, UINT16_C(65'535),
+            UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 24 && use_tables) {
+        benchmark_decode_24<UINT32_C(16'777'049)>(
+            threshold, num_packets, num_drop, num_trials);
+    } else if (num_bits_id == 24 && !use_tables) {
+        benchmark_decode<std::uint32_t, std::uint64_t, UINT32_C(16'777'215),
+            UINT32_C(16'777'049)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 32) {
         benchmark_decode<std::uint32_t, std::uint64_t,
-            UINT32_C(4'294'967'291)>(threshold, num_packets, num_drop, num_trials);
+            std::numeric_limits<uint32_t>::max(), UINT32_C(4'294'967'291)>
+            (threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 64) {
         benchmark_decode<std::uint64_t, __uint128_t,
+            std::numeric_limits<uint64_t>::max(),
             UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_drop, num_trials);
     } else {
         std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
@@ -422,6 +610,7 @@ int main(int argc, char **argv) {
     std::size_t num_trials = 10;
     bool benchmark_insertion = false;
     bool benchmark_decode = false;
+    bool use_tables = false;
 
     for (int i = 0; i < argc; ++i) {
         if (std::string(argv[i]) == "-t") {
@@ -450,6 +639,8 @@ int main(int argc, char **argv) {
                 num_drop = std::stoull(argv[i + 1]);
                 ++i;
             }
+        } else if (std::string(argv[i]) == "--use-tables") {
+            use_tables = true;
         } else if (std::string(argv[i]) == "--insertion") {
             benchmark_insertion = true;
         } else if (std::string(argv[i]) == "--decode") {
@@ -460,6 +651,7 @@ int main(int argc, char **argv) {
     if (benchmark_insertion ^ benchmark_decode) {
         if (benchmark_insertion) {
             run_insertion_benchmark(
+                use_tables,
                 threshold,
                 num_packets,
                 num_bits_id,
@@ -468,6 +660,7 @@ int main(int argc, char **argv) {
             );
         } else if (benchmark_decode) {
             run_decode_benchmark(
+                use_tables,
                 threshold,
                 num_packets,
                 num_bits_id,
@@ -479,7 +672,8 @@ int main(int argc, char **argv) {
         std::cout << "Usage: " << argv[0] << " [-t <threshold>] "
                   << "[-n <num_packets>] " << "[-b <num_bits_id>] "
                   << "[--dropped <num_drop>] "
-                  << "[--trials <num_trials>] [--insertion] [--decode]"
+                  << "[--trials <num_trials>] [--use-tables]"
+                  << "[--insertion] [--decode]"
                   << std::endl;
     }
 

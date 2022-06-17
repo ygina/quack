@@ -80,11 +80,23 @@ void power_table(
 
 template <std::uint16_t MODULUS>
 std::vector<ModularInteger<std::uint16_t, std::uint32_t, MODULUS>>
-power_tables_16(std::size_t size) noexcept {
+gen_power_tables_16(std::size_t size) noexcept {
     using ModInt = ModularInteger<std::uint16_t, std::uint32_t, MODULUS>;
     std::vector<ModInt> result;
     for (std::size_t i = 0; i < 65536; ++i) {
         power_table<std::uint16_t, std::uint32_t, MODULUS>(result, i, size);
+    }
+    return result;
+}
+
+
+template <std::uint32_t MODULUS>
+std::vector<ModularInteger<std::uint32_t, std::uint64_t, MODULUS>>
+gen_power_tables_24(std::size_t size) noexcept {
+    using ModInt = ModularInteger<std::uint32_t, std::uint64_t, MODULUS>;
+    std::vector<ModInt> result;
+    for (std::size_t i = 0; i < 16777216; ++i) {
+        power_table<std::uint32_t, std::uint64_t, MODULUS>(result, i, size);
     }
     return result;
 }
