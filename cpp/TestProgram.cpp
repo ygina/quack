@@ -435,9 +435,6 @@ void benchmark_decode_16(
         // Pre-allocate buffer for polynomial coefficients.
         std::vector<ModularInteger<std::uint16_t, std::uint32_t, MODULUS>> coeffs(num_drop);
 
-        // Allocate buffer for missing packets.
-        std::vector<std::uint16_t> dropped;
-
         begin_timer();
         if (num_drop > 0) {
             acc_1 -= acc_2;
@@ -453,10 +450,8 @@ void benchmark_decode_16(
                     MAX_POWER, coeffs, numbers[j]);
                 assert(!value);
                 do_not_discard(value);
-                dropped.push_back(numbers[j]);
             }
         }
-        do_not_discard(dropped);
         end_timer();
 
         if (i > 0) {
