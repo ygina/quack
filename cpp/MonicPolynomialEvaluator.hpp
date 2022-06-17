@@ -66,6 +66,7 @@ void power_table(
     T_NARROW x, std::size_t size
 ) noexcept {
     if (size > 0) {
+        // pre-compute x^1 to x^size
         const ModularInteger<T_NARROW, T_WIDE, MODULUS> x_mod(x);
         ModularInteger<T_NARROW, T_WIDE, MODULUS> acc = x_mod;
         result.push_back(x_mod);
