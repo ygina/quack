@@ -1,4 +1,10 @@
 #!/bin/sh
+: ${1?"Usage: $0 OUTFILE"}
+
+OUTFILE=$1
+RAWFILE=$OUTFILE.raw
+rm -f $OUTFILE $RAWFILE
+
 for bits in 16 24 32 64;
 do
 	if [[ "$bits" -eq 16 ]]
@@ -7,15 +13,16 @@ do
 	else
 		tables_flag=
 	fi
-	echo "$bits bits"
-	echo "t\ttime_us ($tables_flag)"
+	echo "$bits bits" | tee -a $RAWFILE >> $OUTFILE
+	echo "t\ttime_us ($tables_flag)" | tee -a $RAWFILE >> $OUTFILE
 	for threshold in $(seq 5 5 50);
 	do
 		time_ns=$(./TestProgram -t $threshold -b $bits --dropped 0 --insertion \
-			--trials 100 $tables_flag | grep SUMMARY | awk '{print $7}')
+			--trials 100 $tables_flag | tee -a $RAWFILE \
+			| grep SUMMARY | awk '{print $7}')
 		time_us=$(($time_ns/1000))
-		echo "$threshold\t$time_us"
+		echo "$threshold\t$time_us" | tee -a $RAWFILE >> $OUTFILE
 	done
-	echo ""
+	echo "" | tee -a $RAWFILE >> $OUTFILE
 done
 
