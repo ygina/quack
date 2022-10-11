@@ -1,57 +1,17 @@
-# subset-digest
+# QuACK
 
-## Dependencies
+This repository contains code for the HotNets '22 paper,
+"Sidecar: In-Network Performance Enhancements in the Age of
+Paranoid Transport Protocols".
+The _quACK (quick ACK)_ is a concise representation of a
+multiset of numbers that can be used to efficiently decode
+the randomly-encrypted packet contents a sidecar has received.
 
-* [PARI](https://pari.math.u-bordeaux.fr/download.html): factoring polynomials
-  in finite fields
-* [GLPK](https://www.gnu.org/software/glpk/): solving ILPs
+## Experiments
 
-## Compiling
-To compile the entire workspace, run `cargo b --release` from the
-`subset-digest/` directory. To compile without the PARI and GLPK dependencies,
-run with the `cargo b --release --features disable_validation` feature. The
-compiled binaries can be found in `subset-digest/target/release/`.
+Figures 5 and 6 in the paper.
 
-## Tests
-```
-$ cargo t -- --test-threads 1
-```
+### Construction Time
 
-## Benchmarks
-```
-$ ./target/release/benchmark --accumulator naive -p 0.02 -n 100 --malicious
-[2022-02-17T21:53:03Z DEBUG benchmark] dropped 2/100 elements
-[2022-02-17T21:53:03Z INFO  benchmark] processed 98 elements in 85.915µs
-[2022-02-17T21:53:03Z INFO  benchmark] validation took 84.428982ms
-[2022-02-17T21:53:03Z INFO  benchmark] validation is correct (false)
-```
+### Decoding Time
 
-```
-$ ./target/release/benchmark -n 50000 --accumulator power_sum --threshold 1000 -p 0.01
-[2022-03-12T00:29:53Z DEBUG benchmark] dropped 513/50000 elements
-[2022-03-12T00:29:53Z INFO  benchmark] processed 49487 elements in 4.310809933s
-[2022-03-12T00:29:53Z DEBUG accumulator::power_sum] found 16 cpus
-[2022-03-12T00:29:53Z DEBUG accumulator::power_sum] calculated power sums: 352.48839ms
-[2022-03-12T00:29:53Z DEBUG accumulator::power_sum] calculated power sum difference: 47.354µs
-[2022-03-12T00:29:53Z DEBUG accumulator::power_sum] computed polynomial coefficients: 15.103627ms
-[2022-03-12T00:29:54Z DEBUG accumulator::power_sum] found integer monic polynomial roots: 68.370784ms
-[2022-03-12T00:29:54Z DEBUG accumulator::power_sum] checked roots against element list: 1.898837ms
-[2022-03-12T00:29:54Z INFO  benchmark] validation took 438.790055ms
-```
-
-```
-$ ./target/release/benchmark -n 50000 --accumulator cbf --threshold 1000 -p 0.01
-[2022-03-12T00:28:57Z DEBUG benchmark] dropped 487/50000 elements
-[2022-03-12T00:28:57Z INFO  benchmark] processed 49513 elements in 4.146595ms
-[2022-03-12T00:28:57Z DEBUG accumulator::cbf] calculated the difference cbf: 3.398536ms
-[2022-03-12T00:28:57Z DEBUG accumulator::cbf] setup the system of equations: 2.139251ms
-[2022-03-12T00:28:57Z DEBUG accumulator::cbf] solved an ILP with 628 equations in 19170 variables: 3.387916ms
-[2022-03-12T00:26:42Z INFO  benchmark] validation took 11.205708ms
-```
-
-## End-to-End
-```
-./target/release/router --overwrite --mock
-./target/release/accumulator -a iblt --log log.txt --mock
-./target/release/verifier -a iblt --check-acc-logs log.txt
-```
