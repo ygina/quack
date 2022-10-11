@@ -9,9 +9,27 @@ the randomly-encrypted packet contents a sidecar has received.
 
 ## Experiments
 
-Figures 5 and 6 in the paper.
+Run `make build` to build the binaries.
 
-### Construction Time
+### Construction Time and Decoding Time (Figures 5 and 6)
 
-### Decoding Time
+<p align="center">
+	<img src="img/figure56.png" alt="Figures 5 and 6" style="max-width:30%;height:auto">
+</p>
 
+```
+make benchmark
+cd graphs
+```
+
+Then follow the instructions in `graphs/README.md` to plot the data.
+
+### Comparing the QuACK to Strawmans (Table 2)
+
+<p align="center">
+	<img src="img/table2.png" alt="Table 2" style="max-width:30%;height:auto">
+</p>
+
+```
+make table
+```
