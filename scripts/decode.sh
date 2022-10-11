@@ -15,14 +15,13 @@ do
 	fi
 	echo "$bits bits" | tee -a $RAWFILE >> $OUTFILE
 	echo "t\ttime_us ($tables_flag)" | tee -a $RAWFILE >> $OUTFILE
-	for threshold in $(seq 5 5 50);
+	for dropped in $(seq 0 1 20);
 	do
-		time_ns=$(./TestProgram -t $threshold -b $bits --dropped 0 --insertion \
-			--trials 100 $tables_flag | tee -a $RAWFILE \
-			| grep SUMMARY | awk '{print $7}')
+		time_ns=$(./Quack -b $bits --dropped $dropped --decode \
+			--trials 100 $tables_flag | tee -a $RAWFILE | \
+			grep SUMMARY | awk '{print $7}')
 		time_us=$(($time_ns/1000))
-		echo "$threshold\t$time_us" | tee -a $RAWFILE >> $OUTFILE
+		echo "$dropped\t$time_us" | tee -a $RAWFILE >> $OUTFILE
 	done
 	echo "" | tee -a $RAWFILE >> $OUTFILE
 done
-
