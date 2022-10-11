@@ -3,6 +3,6 @@ Strawman2
 Quack
 *.raw
 /decode.txt
-/insertion.txt
+/construct.txt
 __pycache__/
 *.pdf

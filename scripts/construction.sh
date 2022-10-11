@@ -17,7 +17,7 @@ do
 	echo "t\ttime_us ($tables_flag)" | tee -a $RAWFILE >> $OUTFILE
 	for threshold in $(seq 5 5 50);
 	do
-		time_ns=$(./Quack -t $threshold -b $bits --dropped 0 --insertion \
+		time_ns=$(./Quack -t $threshold -b $bits --dropped 0 --construct \
 			--trials 100 $tables_flag | tee -a $RAWFILE \
 			| grep SUMMARY | awk '{print $7}')
 		time_us=$(($time_ns/1000))

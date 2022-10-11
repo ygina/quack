@@ -53,8 +53,8 @@ def plot_legend(filename, pdf, keys=None):
     save_pdf(pdf, bbox_inches=bbox)
 
 keys = [16,24,32]
-plot_graph(filename='insertion.txt', pdf='figure5.pdf',
+plot_graph(filename='construct.txt', pdf='figure5.pdf',
            xlabel='Threshold (n=1000)', keys=keys)
 plot_graph(filename='decode.txt', pdf='figure6.pdf',
            xlabel='Missing Packets (n=1000,t=20)', keys=keys)
-plot_legend(filename='insertion.txt', pdf='legend.pdf', keys=keys)
+plot_legend(filename='construct.txt', pdf='legend.pdf', keys=keys)

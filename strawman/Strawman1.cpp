@@ -69,7 +69,7 @@ template <> constexpr const char *TYPE_NAME<std::uint64_t> = "64-bit integers";
 
 // How long does it take to insert a number into a PowerSumAccumulator?
 template <typename T_BITS, unsigned long NUM_BYTES>
-void benchmark_insertion(
+void benchmark_construct(
     std::size_t num_packets,
     std::size_t num_drop,
     std::size_t num_trials
@@ -124,18 +124,18 @@ void benchmark_insertion(
 }
 
 
-void run_insertion_benchmark(
+void run_construct_benchmark(
     std::size_t num_packets,
     std::size_t num_bits_id,
     std::size_t num_drop,
     std::size_t num_trials
 ) {
     if (num_bits_id == 16) {
-        benchmark_insertion<std::uint16_t, 2>(num_packets, num_drop, num_trials);
+        benchmark_construct<std::uint16_t, 2>(num_packets, num_drop, num_trials);
     } else if (num_bits_id == 32) {
-        benchmark_insertion<std::uint32_t, 4>(num_packets, num_drop, num_trials);
+        benchmark_construct<std::uint32_t, 4>(num_packets, num_drop, num_trials);
     } else if (num_bits_id == 64) {
-        benchmark_insertion<std::uint64_t, 8>(num_packets, num_drop, num_trials);
+        benchmark_construct<std::uint64_t, 8>(num_packets, num_drop, num_trials);
     } else {
         std::cout << "ERROR: <num_bits_id> must be 16, 32, or 64" << std::endl;
     }
@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
     std::size_t num_bits_id = 16;
     std::size_t num_drop = 20;
     std::size_t num_trials = 10;
-    bool benchmark_insertion = false;
+    bool benchmark_construct = false;
     bool benchmark_decode = false;
     bool help = false;
 
@@ -266,16 +266,16 @@ int main(int argc, char **argv) {
                 num_drop = std::stoull(argv[i + 1]);
                 ++i;
             }
-        } else if (std::string(argv[i]) == "--insertion") {
-            benchmark_insertion = true;
+        } else if (std::string(argv[i]) == "--construct") {
+            benchmark_construct = true;
         } else if (std::string(argv[i]) == "--decode") {
             benchmark_decode = true;
         }
     }
 
-    if ((benchmark_insertion ^ benchmark_decode) && !help) {
-        if (benchmark_insertion) {
-            run_insertion_benchmark(
+    if ((benchmark_construct ^ benchmark_decode) && !help) {
+        if (benchmark_construct) {
+            run_construct_benchmark(
                 num_packets,
                 num_bits_id,
                 num_drop,

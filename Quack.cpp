@@ -78,7 +78,7 @@ static const auto power_tables_16 = gen_power_tables_16<
 
 // How long does it take to insert a number into a PowerSumAccumulator?
 template <std::uint16_t MODULUS>
-void benchmark_insertion_16(
+void benchmark_construct_16(
     std::size_t size,
     std::size_t num_packets,
     std::size_t num_drop,
@@ -139,7 +139,7 @@ void benchmark_insertion_16(
 
 
 template <std::uint32_t MODULUS>
-void benchmark_insertion_24(
+void benchmark_construct_24(
     std::size_t size,
     std::size_t num_packets,
     std::size_t num_drop,
@@ -203,7 +203,7 @@ void benchmark_insertion_24(
 
 template <typename T_NARROW, typename T_WIDE, T_NARROW MAX_VALUE, T_NARROW
 MODULUS>
-void benchmark_insertion(
+void benchmark_construct(
     std::size_t size,
     std::size_t num_packets,
     std::size_t num_drop,
@@ -263,7 +263,7 @@ void benchmark_insertion(
 }
 
 
-void run_insertion_benchmark(
+void run_construct_benchmark(
     std::size_t use_tables,
     std::size_t threshold,
     std::size_t num_packets,
@@ -272,23 +272,23 @@ void run_insertion_benchmark(
     std::size_t num_trials
 ) {
     if (num_bits_id == 16 && use_tables) {
-        benchmark_insertion_16<UINT16_C(65'521)>(
+        benchmark_construct_16<UINT16_C(65'521)>(
             threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 16 && !use_tables) {
-        benchmark_insertion<std::uint16_t, std::uint32_t, UINT16_C(65'535),
+        benchmark_construct<std::uint16_t, std::uint32_t, UINT16_C(65'535),
             UINT16_C(65'521)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 24 && use_tables) {
-        benchmark_insertion_24<UINT32_C(16'777'049)>(
+        benchmark_construct_24<UINT32_C(16'777'049)>(
             threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 24 && !use_tables) {
-        benchmark_insertion<std::uint32_t, std::uint64_t, UINT32_C(16'777'215),
+        benchmark_construct<std::uint32_t, std::uint64_t, UINT32_C(16'777'215),
             UINT32_C(16'777'049)>(threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 32) {
-        benchmark_insertion<std::uint32_t, std::uint64_t,
+        benchmark_construct<std::uint32_t, std::uint64_t,
             std::numeric_limits<uint32_t>::max(), UINT32_C(4'294'967'291)>
             (threshold, num_packets, num_drop, num_trials);
     } else if (num_bits_id == 64) {
-        benchmark_insertion<std::uint64_t, __uint128_t,
+        benchmark_construct<std::uint64_t, __uint128_t,
             std::numeric_limits<uint64_t>::max(),
             UINT64_C(18'446'744'073'709'551'557)>(threshold, num_packets, num_drop, num_trials);
     } else {
@@ -603,7 +603,7 @@ int main(int argc, char **argv) {
     std::size_t num_bits_id = 16;
     std::size_t num_drop = threshold;
     std::size_t num_trials = 10;
-    bool benchmark_insertion = false;
+    bool benchmark_construct = false;
     bool benchmark_decode = false;
     bool use_tables = false;
 
@@ -636,16 +636,16 @@ int main(int argc, char **argv) {
             }
         } else if (std::string(argv[i]) == "--use-tables") {
             use_tables = true;
-        } else if (std::string(argv[i]) == "--insertion") {
-            benchmark_insertion = true;
+        } else if (std::string(argv[i]) == "--construct") {
+            benchmark_construct = true;
         } else if (std::string(argv[i]) == "--decode") {
             benchmark_decode = true;
         }
     }
 
-    if (benchmark_insertion ^ benchmark_decode) {
-        if (benchmark_insertion) {
-            run_insertion_benchmark(
+    if (benchmark_construct ^ benchmark_decode) {
+        if (benchmark_construct) {
+            run_construct_benchmark(
                 use_tables,
                 threshold,
                 num_packets,
@@ -668,7 +668,7 @@ int main(int argc, char **argv) {
                   << "[-n <num_packets>] " << "[-b <num_bits_id>] "
                   << "[--dropped <num_drop>] "
                   << "[--trials <num_trials>] [--use-tables]"
-                  << "[--insertion] [--decode]"
+                  << "[--construct] [--decode]"
                   << std::endl;
     }
 
