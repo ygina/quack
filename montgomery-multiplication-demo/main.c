@@ -10,7 +10,8 @@
 const uint64_t N        = 9223372036854775783ull,
                R        = 9223372036854775808ull,
                RInv     = 1106804644422573094ull,
-               NegNInv  = 1106804644422573097ull;
+               NegNInv  = 1106804644422573097ull,
+               RSqModN  = 625ull;
 // Bitwise division & mod by R
 const uint64_t R_log2 = 63;
 const uint64_t RModMask = (1ull << 63) - 1;
@@ -24,26 +25,37 @@ inline static uint128_t multiply_64(uint64_t x, uint64_t y) {
     return (uint128_t)x * (uint128_t)y;
 }
 
-// Montgomery form I/O (these are expensive!)
-inline static uint64_t to_montgomery_form(const uint64_t x) {
-    return multiply_64(x, R) % (uint128_t)N;
-}
-
-inline static uint64_t from_montgomery_form(const uint64_t x) {
-    return multiply_64(x, RInv) % (uint128_t)N;
-}
-
 // Montgomery form multiplication, addition (these are cheap!)
 // from wiki https://en.wikipedia.org/wiki/Montgomery_modular_multiplication
 static inline uint64_t montgomery_redc(const uint128_t x) {
-    // TODO: This is a pretty hand-wavey read of the bitwidths, should be a bit
-    // more careful to ensure no overflow.
-    // m is 63 bits
+    // Overflow here is OK because we're modding by a small power of two
     uint64_t m = ((x & RModMask) * NegNInv) & RModMask;
     // // (x + (m * N)) is 63 bit + 126 bits => 127 bits, then downshift
     // // so should all work out
     uint64_t t = (((uint128_t)x) + multiply_64(m, N)) >> (uint128_t)R_log2;
     return (t < N) ? t : (t - N);
+}
+
+static inline uint64_t montgomery_redc_64(const uint64_t x) {
+    // Overflow here is OK because we're modding by a small power of two
+    uint64_t m = ((x & RModMask) * NegNInv) & RModMask;
+    // // (x + (m * N)) is 63 bit + 126 bits => 127 bits, then downshift
+    // // so should all work out
+    uint64_t t = (((uint128_t)x) + multiply_64(m, N)) >> (uint128_t)R_log2;
+    return (t < N) ? t : (t - N);
+}
+
+// Montgomery form I/O (these are expensive!)
+inline static uint64_t to_montgomery_form(const uint64_t x) {
+    // optimization pointed out by AOzdemir!
+    // return multiply_64(x, R) % (uint128_t)N;
+    return montgomery_redc(multiply_64(x, RSqModN));
+}
+
+inline static uint64_t from_montgomery_form(const uint64_t x) {
+    // optimization pointed out by aozdemir!
+    // return multiply_64(x, RInv) % (uint128_t)N;
+    return montgomery_redc_64(x);
 }
 
 static inline uint64_t montgomery_multiply(const uint64_t x, const uint64_t y) {
