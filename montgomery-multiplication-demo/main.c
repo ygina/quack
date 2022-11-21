@@ -119,4 +119,21 @@ int main() {
     printf("Checking both give same power sums...\n");
     for (int i = 0; i < N_SUMS; i++)
         assert(from_montgomery_form(SUMS[i]) == SUMS_TO_CHECK[i]);
+
+    // Time the Montgomery form approach
+    printf("Running WITH montgomery form DIRECTLY...\n");
+    timer_start();
+    for (int run = 0; run < N_TRIALS; run++) {
+        memset(SUMS, 0, N_SUMS * sizeof(SUMS[0]));
+        for (int p = 0; p < N_PACKETS; p++) {
+            uint64_t packet = PACKETS[p];
+            uint64_t power = packet;
+            for (int i = 0; i < N_SUMS; i++) {
+                SUMS[i] = montgomery_add(power, SUMS[i]);
+                if (i == N_SUMS) break;
+                power = montgomery_multiply(power, packet);
+            }
+        }
+    }
+    timer_print("WITH DIRECTLY");
 }
