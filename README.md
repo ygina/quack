@@ -1,8 +1,8 @@
 # QuACK
 
 This repository contains code for the HotNets '22 paper,
-"Sidecar: In-Network Performance Enhancements in the Age of
-Paranoid Transport Protocols".
+_[Sidecar: In-Network Performance Enhancements in the Age of
+Paranoid Transport Protocols](https://conferences.sigcomm.org/hotnets/2022/papers/hotnets22_yuan.pdf)_.
 The _quACK (quick ACK)_ is a concise representation of a
 multiset of numbers that can be used to efficiently decode
 the randomly-encrypted packet contents a sidecar has received.
