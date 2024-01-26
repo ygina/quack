@@ -1,8 +1,1 @@
-Strawman1
-Strawman2
-Quack
-*.raw
-/decode.txt
-/construct.txt
-__pycache__/
-*.pdf
+target/

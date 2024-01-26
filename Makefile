@@ -1,18 +1,10 @@
-# MCPU_FLAG = -mcpu=apple-m1
-MCPU_FLAG =
-FLAGS = -std=gnu++20 -Wall -Wextra -pedantic
+RUST_LOG ?= info
 
 build:
-	clang++ -O3 $(MCPU_FLAG) $(FLAGS) -o Quack Quack.cpp
-	clang++ -O3 $(MCPU_FLAG) $(FLAGS) -o Strawman1 strawman/Strawman1.cpp
-	clang++ -O3 $(MCPU_FLAG) -msha $(FLAGS) -o Strawman2 strawman/Strawman2.cpp
+	cargo b --release
 
-benchmark: build
-	./scripts/construction.sh graphs/construct.txt  # figure5
-	./scripts/decode.sh graphs/decode.txt           # figure6
+construct: build
+	RUST_LOG=$(RUST_LOG) ../target/release/quack-bm construct -t 20 -n 1000 -b 32 --dropped 20
 
-table: build
-	./scripts/table2.sh                             # table2
-
-clean:
-	rm -f graphs/*.txt.raw graphs/*.raw Quack Strawman1 Strawman2
+decode: build
+	RUST_LOG=$(RUST_LOG) ../target/release/quack-bm decode -t 20 -n 1000 -b 32 --dropped 20
