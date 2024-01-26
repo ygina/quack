@@ -9,9 +9,9 @@ This crate contains the recommended 32-bit power sum quACK implementation and,
 if feature-enabled, strawmen and power sum quACKs in different bit widths with
 various optimizations.
 
-* Build: `cargo +nightly build --release --all-features --examples`
-* Test: `cargo +nightly test --all-features`
-* Documentation: `cargo +nightly doc --all-features`
+* Build: `make build`
+* Test: `make test`
+* Documentation: `make doc`
 
 The _power sum quACK_ is useful for decoding a set difference of elements when
 the number of elements in the set difference is comparatively small to the
@@ -26,6 +26,23 @@ power sums. If `X` is the multiset of elements in the quACK, then the `i`-th
 power sum is just the sum of `x^i` for all `x` in `X`.
 
 See the [API docs](target/doc/quack/) for more info.
+
+## Dependencies
+
+Install [Rust](https://www.rust-lang.org/tools/install). You will also need to
+install a [nightly toolchain](https://rust-lang.github.io/rustup/concepts/channels.html)
+to use feature attributes. Use `nightly-2023-01-26` if the current nightly is
+broken:
+
+```
+rustup toolchain install nightly
+```
+
+To enable the `libpari` feature, you will need to download and build
+[PARI/GP](https://pari.math.u-bordeaux.fr/download.html). However, this is not
+recommended except for benchmarking since installing an entire algebra library
+just to factor a polynomial in a modular field is exceptionally overkill and
+actually slower in most settings.
 
 ## Example
 
@@ -65,6 +82,7 @@ fn main () {
 
 ## Benchmark
 
+Run `make benchmark` to build the benchmarks with all features enabled.
 There are three benchmarks for the various quACK and strawman implementations:
 
 * `benchmark_construct`: Benchmark the time it takes to construct and serialize

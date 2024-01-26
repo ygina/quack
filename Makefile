@@ -1,10 +1,13 @@
 RUST_LOG ?= info
 
 build:
-	cargo b --release
+	cargo +nightly build --release
 
-construct: build
-	RUST_LOG=$(RUST_LOG) ../target/release/quack-bm construct -t 20 -n 1000 -b 32 --dropped 20
+test:
+	cargo +nightly test --all-features
 
-decode: build
-	RUST_LOG=$(RUST_LOG) ../target/release/quack-bm decode -t 20 -n 1000 -b 32 --dropped 20
+doc:
+	cargo +nightly doc --all-features
+
+benchmark:
+	cargo +nightly build --release --all-features --examples
