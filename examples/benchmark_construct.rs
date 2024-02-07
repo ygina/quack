@@ -120,12 +120,12 @@ where
 fn benchmark_strawman1a(num_packets: usize) -> (Duration, u64) {
     let numbers = gen_numbers::<u32>(num_packets);
 
-    let mut quack = StrawmanAQuack { sidecar_id: 0 };
+    let mut quack = StrawmanAQuack { sidekick_id: 0 };
 
     // Insert a bunch of random numbers into the accumulator.
     let t = Timer::start();
     for number in numbers {
-        quack.sidecar_id = number;
+        quack.sidekick_id = number;
         let _bytes = bincode::serialize(&quack).unwrap();
     }
 

@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 /// Strawman quACK implementation that echoes every packet identifier.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StrawmanAQuack {
-    pub sidecar_id: u32,
+    pub sidekick_id: u32,
 }
 
 /// Strawman quACK implementation that echoes a sliding window of packet identifiers.
