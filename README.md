@@ -25,7 +25,7 @@ The underlying representation of a power sum quACK is a threshold number of
 power sums. If `X` is the multiset of elements in the quACK, then the `i`-th
 power sum is just the sum of `x^i` for all `x` in `X`.
 
-See the [API docs](target/doc/quack/) for more info.
+See the [API docs](https://ginayuan.com/quack/quack/) for more info.
 
 ## Dependencies
 
@@ -46,8 +46,8 @@ actually slower in most settings.
 
 ## Example
 
-All power sum quACKS implement the same [PowerSumQuack]() trait and can be used
-interchangeably in the following example:
+All power sum quACKS implement the same [PowerSumQuack](https://ginayuan.com/quack/quack/trait.PowerSumQuack.html)
+trait and can be used interchangeably in the following example:
 
 ```rust
 use quack::{PowerSumQuack, PowerSumQuackU32};
