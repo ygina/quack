@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["eval","eval_montgomery","eval_precompute","factor"],"struct":["ModularInteger","MontgomeryInteger"],"trait":["ModularArithmetic"],"type":["CoefficientVector"]};

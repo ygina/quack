@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["global_config_set_max_power_sum_threshold"],"mod":["arithmetic"],"struct":["MontgomeryQuack","PowerSumQuackU16","PowerSumQuackU32","PowerSumQuackU64","PowerTableQuack","StrawmanAQuack","StrawmanBQuack"],"trait":["PowerSumQuack"]};
