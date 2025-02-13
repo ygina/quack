@@ -7,7 +7,7 @@ readme = "README.md"
 
 [lib]
 name = "quack"
-crate-type = ["cdylib"]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
