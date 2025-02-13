@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "quack.h"
 
 // The threshold is the maximum number of elements that can be decoded.
@@ -25,8 +26,8 @@ int main() {
     // Subtract the second quACK from the first and decode the elements.
     PowerSumQuackU32* q3 = quack_sub(q1, q2);
     CoefficientVectorU32* coeffs = quack_to_coeffs(q3);
-    const unsigned int log[] = {1, 2, 3, 4, 5};
-    unsigned int result[BUFFER_SIZE];
+    const uint32_t log[] = {1, 2, 3, 4, 5};
+    uint32_t result[BUFFER_SIZE];
     size_t len = 0;
     for (size_t i = 0; i < 5; i++) {
         if (quack_coeffs_eval(coeffs, log[i]) == 0) {
