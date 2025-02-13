@@ -101,6 +101,6 @@ available by default when building the Rust crate. Example use of C bindings:
 
 ```
 cargo build --release
-gcc examples/example.c -o example -L./target/release -lquack -Wl,-rpath,./target/release -I./include
-./example
+gcc examples/decode_with_log.c -o decode_with_log -L./target/release -lquack -Wl,-rpath,./target/release -I./include
+./decode_with_log
 ```

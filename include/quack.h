@@ -19,6 +19,12 @@ size_t quack_decode_with_log(const PowerSumQuackU32* quack, const unsigned int* 
 PowerSumQuackU32* quack_sub(PowerSumQuackU32* lhs, PowerSumQuackU32* rhs);
 void quack_free(PowerSumQuackU32* quack);
 
+typedef struct CoefficientVectorU32 CoefficientVectorU32;
+
+CoefficientVectorU32* quack_to_coeffs(const PowerSumQuackU32* quack);
+unsigned int quack_coeffs_eval(CoefficientVectorU32* coeffs, unsigned int x);
+void quack_coeffs_free(CoefficientVectorU32* coeffs);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,4 +1,5 @@
 use crate::*;
+use crate::arithmetic::*;
 
 #[no_mangle]
 pub extern "C" fn quack_global_config_set_max_power_sum_threshold(threshold: usize) {
@@ -79,4 +80,28 @@ pub extern "C" fn quack_sub(
 pub extern "C" fn quack_free(quack: *mut PowerSumQuackU32) {
     debug_assert!(!quack.is_null());
     unsafe { drop(Box::from_raw(quack)) };
+}
+
+type CoefficientVectorU32 = CoefficientVector<ModularInteger<u32>>;
+
+#[no_mangle]
+pub extern "C" fn quack_to_coeffs(quack: *mut PowerSumQuackU32) -> *mut CoefficientVectorU32 {
+    debug_assert!(!quack.is_null());
+    let result = unsafe { (*quack).to_coeffs() };
+    Box::into_raw(Box::new(result))
+}
+
+#[no_mangle]
+pub extern "C" fn quack_coeffs_eval(coeffs: *mut CoefficientVectorU32, x: u32) -> u32 {
+    debug_assert!(!coeffs.is_null());
+    let coeffs = unsafe { Box::from_raw(coeffs) };
+    let result = eval(&coeffs, x);
+    Box::into_raw(Box::new(coeffs));
+    result.value()
+}
+
+#[no_mangle]
+pub extern "C" fn quack_coeffs_free(coeffs: *mut CoefficientVectorU32) {
+    debug_assert!(!coeffs.is_null());
+    unsafe { drop(Box::from_raw(coeffs)) }
 }
