@@ -55,3 +55,5 @@ cfg_power_table! {
     pub use power_sum::PowerSumQuackU16;
     pub use power_table::PowerTableQuack;
 }
+
+mod ffi;
