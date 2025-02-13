@@ -1,5 +1,5 @@
-#ifndef POWER_SUM_H
-#define POWER_SUM_H
+#ifndef QUACK_H
+#define QUACK_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,4 +29,4 @@ void quack_coeffs_free(CoefficientVectorU32* coeffs);
 }
 #endif
 
-#endif // POWER_SUM_H
+#endif // QUACK_H
