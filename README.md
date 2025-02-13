@@ -93,3 +93,14 @@ elements in a received quACK(s), given the `n` sent packets.
 * `benchmark_construct_multi`: Benchmark the time it takes to construct and
 serialize a quACK(s) when multiplexing quACKs across multiple connections using
 a hash table.
+
+## C Bindings
+
+A dynamic C library and header file for a subset of the library functions are
+available by default when building the Rust crate. Example use of C bindings:
+
+```
+cargo build --release
+gcc examples/example.c -o example -L./target/release -lquack -Wl,-rpath,./target/release -I./include
+./example
+```
