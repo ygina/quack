@@ -94,7 +94,7 @@ impl PowerSumQuack for PowerTableQuack {
 
     fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
         if self.count() == 0 {
-            return log.to_vec();
+            return vec![];
         }
         let coeffs = self.to_coeffs();
         log.iter()
@@ -221,7 +221,7 @@ mod test {
     fn test_decode_empty_u16() {
         let quack = PowerTableQuack::new(THRESHOLD);
         assert_eq!(quack.decode_with_log(&[]), vec![]);
-        assert_eq!(quack.decode_with_log(&[1]), vec![1]);
+        assert_eq!(quack.decode_with_log(&[1]), vec![]);
     }
 
     #[test]

@@ -94,7 +94,7 @@ impl PowerSumQuack for MontgomeryQuack {
 
     fn decode_with_log(&self, log: &[u64]) -> Vec<u64> {
         if self.count() == 0 {
-            return log.to_vec();
+            return vec![];
         }
         assert!((self.count() as usize) <= self.threshold(), "number of elements must not exceed threshold");
         let coeffs = self.to_coeffs();
@@ -220,7 +220,7 @@ mod test {
     fn test_decode_empty() {
         let quack = MontgomeryQuack::new(THRESHOLD);
         assert_eq!(quack.decode_with_log(&[]), Vec::<u64>::new());
-        assert_eq!(quack.decode_with_log(&[1]), vec![1]);
+        assert_eq!(quack.decode_with_log(&[1]), vec![]);
     }
 
     #[test]
