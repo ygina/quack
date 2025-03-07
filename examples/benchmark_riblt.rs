@@ -1,6 +1,6 @@
 use std::time::{Instant, Duration};
 use clap::{Parser, ValueEnum};
-use quack::{PowerSumQuack, PowerSumQuackU32, IBLTQuackU32};
+use quack::{PowerSumQuack, PowerSumQuackU32, Quack, IBLTQuackU32};
 
 const NUM_SYMBOLS: [usize; 11] = [
     10, 20, 40, 80, 160, 320, 1000, 10000, 100000, 1000000, 10000000,
@@ -159,7 +159,7 @@ fn benchmark_psum_decode(num_errors: usize, num_iters: usize) -> Box<dyn Benchma
         }
 
         let t1 = Instant::now();
-        q1.sub_assign(q2);
+        q1.sub_assign(&q2);
         let _ = q1.decode_with_log(log.as_slice());
         let t2 = Instant::now();
         result.time += t2 - t1;
@@ -208,7 +208,7 @@ fn one_iblt_decode(result: &mut DecodeBenchmarkResult, num_errors: usize,
 
     let t1 = Instant::now();
     q1.sub_assign(&q2);
-    let succ = q1.decode().decoded();
+    let succ = q1.decode().is_some();
     let t2 = Instant::now();
     if time {
         result.time += t2 - t1;

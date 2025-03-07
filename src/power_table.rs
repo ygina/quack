@@ -1,6 +1,6 @@
 use crate::arithmetic::{self, ModularArithmetic, ModularInteger, CoefficientVector};
 use crate::precompute::{INVERSE_TABLE_U16, POWER_TABLE};
-use crate::PowerSumQuack;
+use crate::{Quack, PowerSumQuack};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -20,9 +20,8 @@ pub struct PowerTableQuack {
     count: u32,
 }
 
-impl PowerSumQuack for PowerTableQuack {
+impl Quack for PowerTableQuack {
     type Element = u16;
-    type ModularElement = ModularInteger<u16>;
 
     fn new(threshold: usize) -> Self {
         Self {
@@ -70,6 +69,29 @@ impl PowerSumQuack for PowerTableQuack {
         }
     }
 
+    fn sub_assign(&mut self, rhs: Self) {
+        assert_eq!(
+            self.threshold(),
+            rhs.threshold(),
+            "expected subtracted quacks to have the same threshold"
+        );
+        for (i, sum) in self.power_sums.iter_mut().enumerate() {
+            sum.sub_assign(rhs.power_sums[i]);
+        }
+        self.count = self.count.wrapping_sub(rhs.count);
+        self.last_value = None;
+    }
+
+    fn sub(self, rhs: Self) -> Self {
+        let mut result = self;
+        result.sub_assign(rhs);
+        result
+    }
+}
+
+impl PowerSumQuack for PowerTableQuack {
+    type ModularElement = ModularInteger<u16>;
+
     fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
         if self.count() == 0 {
             return log.to_vec();
@@ -101,25 +123,6 @@ impl PowerSumQuack for PowerTableQuack {
             coeffs[i].sub_assign(self.power_sums[i]);
             coeffs[i].mul_assign(INVERSE_TABLE_U16[i]);
         }
-    }
-
-    fn sub_assign(&mut self, rhs: Self) {
-        assert_eq!(
-            self.threshold(),
-            rhs.threshold(),
-            "expected subtracted quacks to have the same threshold"
-        );
-        for (i, sum) in self.power_sums.iter_mut().enumerate() {
-            sum.sub_assign(rhs.power_sums[i]);
-        }
-        self.count = self.count.wrapping_sub(rhs.count);
-        self.last_value = None;
-    }
-
-    fn sub(self, rhs: Self) -> Self {
-        let mut result = self;
-        result.sub_assign(rhs);
-        result
     }
 }
 

@@ -72,7 +72,7 @@ pub extern "C" fn quack_sub(
     debug_assert!(!rhs.is_null());
     let lhs_ref = unsafe { Box::from_raw(lhs) };
     let rhs_ref = unsafe { Box::from_raw(rhs) };
-    let result = lhs_ref.sub(*rhs_ref);
+    let result = lhs_ref.sub(&rhs_ref);
     Box::into_raw(Box::new(result))
 }
 

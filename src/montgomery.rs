@@ -1,5 +1,5 @@
 use crate::arithmetic::{self, MontgomeryInteger, ModularArithmetic, CoefficientVector};
-use crate::PowerSumQuack;
+use crate::{Quack, PowerSumQuack};
 use crate::precompute::INVERSE_TABLE_MONTGOMERY;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -16,9 +16,8 @@ pub struct MontgomeryQuack {
     count: u32,
 }
 
-impl PowerSumQuack for MontgomeryQuack {
+impl Quack for MontgomeryQuack {
     type Element = u64;
-    type ModularElement = MontgomeryInteger;
 
     fn new(threshold: usize) -> Self {
         Self {
@@ -70,6 +69,29 @@ impl PowerSumQuack for MontgomeryQuack {
         }
     }
 
+    fn sub_assign(&mut self, rhs: Self) {
+        assert_eq!(
+            self.threshold(),
+            rhs.threshold(),
+            "expected subtracted quacks to have the same threshold"
+        );
+        for (i, sum) in self.power_sums.iter_mut().enumerate() {
+            sum.sub_assign(rhs.power_sums[i]);
+        }
+        self.count = self.count.wrapping_sub(rhs.count);
+        self.last_value = None;
+    }
+
+    fn sub(self, rhs: Self) -> Self {
+        let mut result = self;
+        result.sub_assign(rhs);
+        result
+    }
+}
+
+impl PowerSumQuack for MontgomeryQuack {
+    type ModularElement = MontgomeryInteger;
+
     fn decode_with_log(&self, log: &[u64]) -> Vec<u64> {
         if self.count() == 0 {
             return log.to_vec();
@@ -103,25 +125,6 @@ impl PowerSumQuack for MontgomeryQuack {
             coeffs[i].sub_assign(self.power_sums[i]);
             coeffs[i].mul_assign(INVERSE_TABLE_MONTGOMERY[i]);
         }
-    }
-
-    fn sub_assign(&mut self, rhs: Self) {
-        assert_eq!(
-            self.threshold(),
-            rhs.threshold(),
-            "expected subtracted quacks to have the same threshold"
-        );
-        for (i, sum) in self.power_sums.iter_mut().enumerate() {
-            sum.sub_assign(rhs.power_sums[i]);
-        }
-        self.count = self.count.wrapping_sub(rhs.count);
-        self.last_value = None;
-    }
-
-    fn sub(self, rhs: Self) -> Self {
-        let mut result = self;
-        result.sub_assign(rhs);
-        result
     }
 }
 

@@ -29,15 +29,12 @@ impl Decoder {
         self.decoded == self.cs.len()
     }
 
+    /// Returns (Local, Remote).
     /// Local returns the list of source symbols that are present in B but not in A.
-    pub fn local(&self) -> &Vec<HashType> {
-        &self.local.symbols
-    }
-
     /// Remote returns the list of source symbols that are present in A but not
     /// in B.
-    pub fn remote(&self) -> &Vec<HashType> {
-        &self.remote.symbols
+    pub fn local_remote(self) -> (Vec<HashType>, Vec<HashType>) {
+        (self.local.symbols, self.remote.symbols)
     }
 
     /// AddCodedSymbol passes the next coded symbol in A's sequence to the
