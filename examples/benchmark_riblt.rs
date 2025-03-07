@@ -201,7 +201,7 @@ fn one_iblt_decode(result: &mut DecodeBenchmarkResult, num_errors: usize,
 
     let t1 = Instant::now();
     q1.sub_assign(&q2);
-    let (_, _, succ) = q1.decode();
+    let succ = q1.decode().decoded();
     let t2 = Instant::now();
     if time {
         result.time += t2 - t1;
