@@ -36,7 +36,9 @@ pub mod arithmetic {
 }
 
 mod power_sum;
+mod riblt;
 pub use power_sum::{PowerSumQuack, PowerSumQuackU32};
+pub use riblt::IBLTQuackU32;
 
 cfg_strawmen! {
     mod strawmen;
