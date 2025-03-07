@@ -92,7 +92,8 @@ impl Decoder {
 
     /// TryDecode tries to decode all coded symbols received so far.
     pub fn try_decode(&mut self) {
-        for didx in 0..self.decodable.len() {
+        let mut didx = 0;
+        while didx < self.decodable.len() {
             let cidx = self.decodable[didx];
             let c = self.cs[cidx];
             // We do not need to compare Hash and Symbol.Hash() below, because
@@ -119,6 +120,7 @@ impl Decoder {
                 // must be -1, 0, or 1
                 panic!("invalid degree for decodable coded symbol");
             }
+            didx += 1;
         }
         self.decodable.clear();
     }

@@ -43,7 +43,7 @@ fn fix_head(m: &mut MappingHeap) {
 /// just inserted.
 fn fix_tail(m: &mut MappingHeap) {
     let mut curr = m.len() - 1;
-    loop {
+    while curr != 0 {
         let parent = (curr - 1) / 2;
         if curr == parent || m[parent].coded_idx <= m[curr].coded_idx {
             break;
