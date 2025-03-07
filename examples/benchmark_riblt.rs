@@ -7,7 +7,7 @@ const NUM_SYMBOLS: [usize; 11] = [
 ];
 
 const NUM_ERRORS: [usize; 11] = [
-    1, 2, 4, 10, 20, 40, 80, 160, 320, 1000, 10000,
+    1, 2, 4, 8, 10, 20, 40, 80, 160, 320, 1000,
 ];
 
 const TARGET_DURATION_MS: u64 = 100;
@@ -62,9 +62,9 @@ impl BenchmarkResult for EncodeBenchmarkResult {
     }
 
     fn print(&self) {
-        println!("Benchmark{:?}Encode/m={:<10}{:8}{:>15?}/op",
+        println!("Benchmark{:?}Encode/m={:<10}{:8}{:>13}ns/op",
             self.ty, self.num_symbols, self.num_iters,
-            self.time / (self.num_iters as u32));
+            (self.time / (self.num_iters as u32)).as_nanos());
     }
 }
 
@@ -103,9 +103,9 @@ impl BenchmarkResult for DecodeBenchmarkResult {
     }
 
     fn print(&self) {
-        println!("Benchmark{:?}Decode/d={:<10}{:8}{:>15?}/op{:10.3} succ@2x{:10.3} succ@4x{:10.3} symbols/diff",
+        println!("Benchmark{:?}Decode/d={:<10}{:8}{:>13?}ns/op{:10.3} succ@2x{:10.3} succ@4x{:10.3} symbols/diff",
             self.ty, self.num_errors, self.num_iters,
-            self.time / (self.num_iters as u32),
+            (self.time / (self.num_iters as u32)).as_nanos(),
             (self.succ_2x as f64) / (self.num_iters as f64),
             (self.succ_4x as f64) / (self.num_iters as f64),
             (self.symbols as f64) / ((self.num_iters * self.num_errors) as f64));
@@ -134,13 +134,20 @@ fn benchmark_psum_encode(num_symbols: usize, num_iters: usize) -> Box<dyn Benchm
 fn benchmark_psum_decode(num_errors: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
     // Initialize the result
     let mut result = DecodeBenchmarkResult::new(QuackType::PowerSum);
-    let num_shared = num_errors; // same number of shared symbols as errors
+    // Power sum decoding is actually proportional to num_shared, unlike RIBLT,
+    // since we plug candidate ids into the polynomial. 49x is like 2% loss.
+    let num_shared = 49 * num_errors;
     let num_symbols = num_errors;
-    let num_ids = (num_shared + num_errors) as u32;
+    let num_ids = num_shared + num_errors;
 
     // Benchmark decoding
-    for i in 0..num_iters {
-        let log: Vec<u32> = (0u32..(num_ids)).map(|x| x + num_ids * (i as u32)).collect();
+    let mut next_id = 0;
+    let mut log = vec![0; num_ids];
+    for _ in 0..num_iters {
+        for i in 0..num_ids {
+            next_id += 1;
+            log[i] = next_id;
+        }
 
         let mut q1 = PowerSumQuackU32::new(num_symbols);
         let mut q2 = PowerSumQuackU32::new(num_symbols);
@@ -213,11 +220,16 @@ fn benchmark_iblt_decode(num_errors: usize, num_iters: usize) -> Box<dyn Benchma
     // Initialize the result
     let mut result = DecodeBenchmarkResult::new(QuackType::IBLT);
     let num_shared = num_errors; // same number of shared symbols as errors
-    let num_ids = (num_shared + num_errors) as u32;
+    let num_ids = num_shared + num_errors;
 
     // Benchmark decoding
-    for i in 0..num_iters {
-        let log: Vec<u32> = (0u32..(num_ids)).map(|x| x + num_ids * (i as u32)).collect();
+    let mut next_id = 0;
+    let mut log = vec![0; num_ids];
+    for _ in 0..num_iters {
+        for i in 0..num_ids {
+            next_id += 1;
+            log[i] = next_id;
+        }
 
         // Find the number of coded symbols needed to decode
         let mut lo = num_errors;
