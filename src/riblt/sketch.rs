@@ -9,13 +9,14 @@ use super::symbol::CodedSymbol;
 use super::mapping::RandomMapping;
 use super::decoder::Decoder;
 
+use serde::{Deserialize, Serialize};
 use crate::Quack;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IBLTQuackU32 {
-    count: u32,
-    last_value: Option<HashType>,
     sketch: Vec<CodedSymbol>,
+    last_value: Option<HashType>,
+    count: u32,
 }
 
 impl Quack for IBLTQuackU32 {

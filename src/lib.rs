@@ -123,6 +123,116 @@ pub trait Quack {
     fn sub(self, rhs: &Self) -> Self;
 }
 
+use serde::{Serialize, Deserialize};
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum QuackWrapper {
+    PowerSum(PowerSumQuackU32),
+    IBLT(IBLTQuackU32),
+}
+
+impl Quack for QuackWrapper {
+    type Element = u32;
+
+    fn new(_threshold: usize) -> Self {
+        unimplemented!()
+    }
+
+    fn threshold(&self) -> usize {
+        match self {
+            QuackWrapper::PowerSum(q) => q.threshold(),
+            QuackWrapper::IBLT(q) => q.threshold(),
+        }
+    }
+
+    fn count(&self) -> u32 {
+        match self {
+            QuackWrapper::PowerSum(q) => q.count(),
+            QuackWrapper::IBLT(q) => q.count(),
+        }
+    }
+
+    fn last_value(&self) -> Option<Self::Element> {
+        match self {
+            QuackWrapper::PowerSum(q) => q.last_value(),
+            QuackWrapper::IBLT(q) => q.last_value(),
+        }
+    }
+
+    fn insert(&mut self, value: Self::Element) {
+        match self {
+            QuackWrapper::PowerSum(q) => q.insert(value),
+            QuackWrapper::IBLT(q) => q.insert(value),
+        }
+    }
+
+    fn remove(&mut self, value: Self::Element) {
+        match self {
+            QuackWrapper::PowerSum(q) => q.remove(value),
+            QuackWrapper::IBLT(q) => q.remove(value),
+        }
+    }
+
+    fn sub_assign(&mut self, rhs: &Self) {
+        match self {
+            QuackWrapper::PowerSum(q1) => {
+                if let QuackWrapper::PowerSum(q2) = rhs {
+                    q1.sub_assign(q2);
+                }
+            },
+            QuackWrapper::IBLT(q1) => {
+                if let QuackWrapper::IBLT(q2) = rhs {
+                    q1.sub_assign(q2);
+                }
+            },
+        }
+    }
+
+    fn sub(self, rhs: &Self) -> Self {
+        match self {
+            QuackWrapper::PowerSum(q1) => {
+                if let QuackWrapper::PowerSum(q2) = rhs {
+                    QuackWrapper::PowerSum(q1.sub(q2))
+                } else {
+                    panic!("subtracting quacks of wrong type");
+                }
+            },
+            QuackWrapper::IBLT(q1) => {
+                if let QuackWrapper::IBLT(q2) = rhs {
+                    QuackWrapper::IBLT(q1.sub(q2))
+                } else {
+                    panic!("subtracting quacks of wrong type");
+                }
+            },
+        }
+    }
+}
+
+impl QuackWrapper {
+    pub fn new(threshold: usize, riblt: bool) -> Self {
+        if riblt {
+            QuackWrapper::IBLT(IBLTQuackU32::new(threshold))
+        } else {
+            QuackWrapper::PowerSum(PowerSumQuackU32::new(threshold))
+        }
+    }
+
+    pub fn riblt(&self) -> bool {
+        match self {
+            QuackWrapper::PowerSum(_) => false,
+            QuackWrapper::IBLT(_) => true,
+        }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        bincode::serialize(self).unwrap()
+    }
+
+    pub fn deserialize(buf: &[u8]) -> Self {
+        bincode::deserialize(buf).unwrap()
+    }
+}
+
 mod power_sum;
 mod riblt;
 pub use power_sum::{PowerSumQuack, PowerSumQuackU32};
