@@ -96,8 +96,7 @@ impl IBLTQuackU32 {
         }
         dec.try_decode();
         if dec.decoded() {
-            let (_, remote) = dec.local_remote();
-            Some(remote)
+            Some(dec.remote())
         } else {
             None
         }
@@ -110,7 +109,7 @@ mod test{
 
     #[test]
     fn test_fixed_encode_and_decode() {
-        let sizes = vec![10, 20, 40, 100, 200, (u8::MAX - 1).into()];
+        let sizes = vec![10, 20, 40, 100, 200, u8::MAX.into()];
         for size in sizes {
             let nlocal = size;
             let ncommon = size;

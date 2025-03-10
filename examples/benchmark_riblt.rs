@@ -16,7 +16,7 @@ const NUM_SYMBOLS: [usize; 8] = [
 // the number of errors. Hence, we use 1 byte for the coded symbol count which
 // is slightly less than 290.
 const NUM_ERRORS: [usize; 10] = [
-    1, 2, 4, 8, 16, 20, 40, 80, 160, (u8::MAX - 1) as usize,
+    1, 2, 4, 8, 16, 20, 40, 80, 160, u8::MAX as usize,
 ];
 
 const TARGET_DURATION_MS: u64 = 100;

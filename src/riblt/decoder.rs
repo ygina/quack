@@ -1,5 +1,5 @@
 use super::HashType;
-use super::symbol::{CodedSymbol, Direction, REMOVE, ADD};
+use super::symbol::{CodedSymbol, Direction, REMOVE};
 use super::mapping::RandomMapping;
 use super::encoder::CodingWindow;
 
@@ -9,8 +9,6 @@ use super::encoder::CodingWindow;
 pub struct Decoder {
     /// coded symbols received so far
     cs: Vec<CodedSymbol>,
-    /// set of source symbols that are exclusive to the decoder
-    local: CodingWindow,
     /// set of source symbols that the decoder initially has
     window: CodingWindow,
     /// set of source symbols that are exclusive to the encoder
@@ -29,12 +27,9 @@ impl Decoder {
         self.decoded == self.cs.len()
     }
 
-    /// Returns (Local, Remote).
-    /// Local returns the list of source symbols that are present in B but not in A.
-    /// Remote returns the list of source symbols that are present in A but not
-    /// in B.
-    pub fn local_remote(self) -> (Vec<HashType>, Vec<HashType>) {
-        (self.local.symbols, self.remote.symbols)
+    /// The list of source symbols that are present in A but not in B.
+    pub fn remote(self) -> Vec<HashType> {
+        self.remote.symbols
     }
 
     /// AddCodedSymbol passes the next coded symbol in A's sequence to the
@@ -44,11 +39,10 @@ impl Decoder {
         // scan through decoded cs to peel off matching ones
         c = self.window.apply_window(c, REMOVE);
         c = self.remote.apply_window(c, REMOVE);
-        c = self.local.apply_window(c, ADD);
         // insert the new coded c
         self.cs.push(c);
         // check if the coded c is decodable, and insert into decodable list if so
-        if c.count == ADD || c.count == REMOVE {
+        if c.count == 1 {
             self.decodable.push(self.cs.len() - 1);
         } else if c.count == 0 && c.hash == 0 {
             self.decodable.push(self.cs.len() - 1);
@@ -79,7 +73,7 @@ impl Decoder {
             // duplicates. On the other hand, it is fine that we insert all
             // degree-1 or -1 decodable symbols, because we only see them in such
             // state once.
-            if self.cs[cidx].count == REMOVE || self.cs[cidx].count == ADD {
+            if self.cs[cidx].count == 1 {
                 self.decodable.push(cidx);
             }
             m.next_index();
@@ -108,8 +102,6 @@ impl Decoder {
                 let m = self.apply_new_symbol(ns, REMOVE);
                 self.remote.add_hash_with_mapping(ns, m);
                 self.decoded += 1;
-            } else if c.count == REMOVE {
-                panic!("only handle subset reconciliation");
             } else if c.count == 0 {
                 self.decoded += 1;
             } else {
@@ -131,7 +123,6 @@ impl Decoder {
     //     // if len(d.decodable) != 0 {
     //     //     self.decodable = self.decodable[:0]
     //     // }
-    //     // self.local.reset()
     //     // self.remote.reset()
     //     // self.window.reset()
     //     // self.decoded = 0
