@@ -1,6 +1,6 @@
 use std::time::{Instant, Duration};
 use clap::{Parser, ValueEnum};
-use quack::{PowerSumQuack, PowerSumQuackU32, Quack, IBLTQuackU32};
+use quack::{PowerSumQuack, PowerSumQuackU32, Quack, IBLTQuackU32, QuackWrapper};
 
 const NUM_SYMBOLS: [usize; 11] = [
     10, 20, 40, 80, 160, 320, 1000, 10000, 100000, 1000000, 10000000,
@@ -25,7 +25,7 @@ struct Cli {
     decode: bool,
 }
 
-#[derive(ValueEnum, Debug, Clone)]
+#[derive(ValueEnum, Debug, Copy, Clone)]
 enum QuackType {
     PowerSum,
     IBLT,
@@ -112,9 +112,14 @@ impl BenchmarkResult for DecodeBenchmarkResult {
     }
 }
 
-fn benchmark_psum_encode(num_symbols: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
+fn benchmark_encode(
+    quack_ty: QuackType, num_symbols: usize, num_iters: usize,
+) -> Box<dyn BenchmarkResult> {
     // Setup the benchmark
-    let mut q = PowerSumQuackU32::new(num_symbols);
+    let mut q = match quack_ty {
+        QuackType::PowerSum => QuackWrapper::new(num_symbols, false),
+        QuackType::IBLT => QuackWrapper::new(num_symbols, true),
+    };
 
     // Benchmark encoding
     let t1 = Instant::now();
@@ -124,16 +129,16 @@ fn benchmark_psum_encode(num_symbols: usize, num_iters: usize) -> Box<dyn Benchm
     let t2 = Instant::now();
 
     // Set the result
-    let mut result = EncodeBenchmarkResult::new(QuackType::PowerSum);
+    let mut result = EncodeBenchmarkResult::new(quack_ty);
     result.num_symbols = num_symbols;
     result.num_iters = num_iters;
     result.time = t2 - t1;
     Box::new(result)
 }
 
-fn benchmark_psum_decode(num_errors: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
+fn benchmark_psum_decode(quack_ty: QuackType, num_errors: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
     // Initialize the result
-    let mut result = DecodeBenchmarkResult::new(QuackType::PowerSum);
+    let mut result = DecodeBenchmarkResult::new(quack_ty);
     // Power sum decoding is actually proportional to num_shared, unlike RIBLT,
     // since we plug candidate ids into the polynomial. 49x is like 2% loss.
     let num_shared = 49 * num_errors;
@@ -174,25 +179,6 @@ fn benchmark_psum_decode(num_errors: usize, num_iters: usize) -> Box<dyn Benchma
     Box::new(result)
 }
 
-fn benchmark_iblt_encode(num_symbols: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
-    // Setup the benchmark
-    let mut q = IBLTQuackU32::new(num_symbols);
-
-    // Benchmark encoding
-    let t1 = Instant::now();
-    for i in 0..num_iters {
-        q.insert(i as u32);
-    }
-    let t2 = Instant::now();
-
-    // Set the result
-    let mut result = EncodeBenchmarkResult::new(QuackType::IBLT);
-    result.num_symbols = num_symbols;
-    result.num_iters = num_iters;
-    result.time = t2 - t1;
-    Box::new(result)
-}
-
 fn one_iblt_decode(result: &mut DecodeBenchmarkResult, num_errors: usize,
                    num_shared: usize, log: &Vec<u32>, num_symbols: usize,
                    time: bool) -> bool
@@ -216,9 +202,11 @@ fn one_iblt_decode(result: &mut DecodeBenchmarkResult, num_errors: usize,
     succ
 }
 
-fn benchmark_iblt_decode(num_errors: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
+fn benchmark_iblt_decode(
+    quack_ty: QuackType, num_errors: usize, num_iters: usize,
+) -> Box<dyn BenchmarkResult> {
     // Initialize the result
-    let mut result = DecodeBenchmarkResult::new(QuackType::IBLT);
+    let mut result = DecodeBenchmarkResult::new(quack_ty);
     let num_shared = num_errors; // same number of shared symbols as errors
     let num_ids = num_shared + num_errors;
 
@@ -269,12 +257,16 @@ fn benchmark_iblt_decode(num_errors: usize, num_iters: usize) -> Box<dyn Benchma
     Box::new(result)
 }
 
-fn benchmark(func: fn(usize, usize) -> Box<dyn BenchmarkResult>, params: &[usize]) {
+fn benchmark(
+    quack_ty: QuackType,
+    func: fn(QuackType, usize, usize) -> Box<dyn BenchmarkResult>,
+    params: &[usize],
+) {
     let target = Duration::from_millis(TARGET_DURATION_MS);
     for &param in params {
         let mut num_iters = 1;
         loop {
-            let result = func(param, num_iters);
+            let result = func(quack_ty, param, num_iters);
             if result.time() > target || num_iters > 10_000_000 {
                 result.print();
                 break;
@@ -294,18 +286,18 @@ fn main() {
             quack::global_config_set_max_power_sum_threshold(
                 *NUM_SYMBOLS.last().unwrap());
             if args.encode {
-                benchmark(benchmark_psum_encode, NUM_SYMBOLS.as_slice());
+                benchmark(args.quack_ty, benchmark_encode, NUM_SYMBOLS.as_slice());
             }
             if args.decode {
-                benchmark(benchmark_psum_decode, NUM_ERRORS.as_slice());
+                benchmark(args.quack_ty, benchmark_psum_decode, NUM_ERRORS.as_slice());
             }
         }
         QuackType::IBLT => {
             if args.encode {
-                benchmark(benchmark_iblt_encode, NUM_SYMBOLS.as_slice());
+                benchmark(args.quack_ty, benchmark_encode, NUM_SYMBOLS.as_slice());
             }
             if args.decode {
-                benchmark(benchmark_iblt_decode, NUM_ERRORS.as_slice());
+                benchmark(args.quack_ty, benchmark_iblt_decode, NUM_ERRORS.as_slice());
             }
         }
     }
