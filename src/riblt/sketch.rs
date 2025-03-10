@@ -89,11 +89,8 @@ impl Quack for IBLTQuackU32 {
 }
 
 impl IBLTQuackU32 {
-    pub fn decode(&self) -> Option<Vec<HashType>> {
-        let mut dec = Decoder::default();
-        for &c in &self.sketch {
-            dec.add_coded_symbol(c);
-        }
+    pub fn decode(self) -> Option<Vec<HashType>> {
+        let mut dec = Decoder::new(self.sketch);
         dec.try_decode();
         if dec.decoded() {
             Some(dec.remote())
