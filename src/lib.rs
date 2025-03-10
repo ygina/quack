@@ -123,7 +123,7 @@ pub trait Quack {
     fn sub(self, rhs: &Self) -> Self;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QuackWrapper {
     PowerSum(PowerSumQuackU32),
     IBLT(IBLTQuackU32),
@@ -222,20 +222,6 @@ impl QuackWrapper {
         }
     }
 
-    pub fn psum_inner(&self) -> &PowerSumQuackU32 {
-        match self {
-            QuackWrapper::PowerSum(inner) => inner,
-            QuackWrapper::IBLT(_) => panic!("bad quack type"),
-        }
-    }
-
-    pub fn iblt_inner(&self) -> &IBLTQuackU32 {
-        match self {
-            QuackWrapper::IBLT(inner) => inner,
-            QuackWrapper::PowerSum(_) => panic!("bad quack type"),
-        }
-    }
-
     pub fn serialize(&self, buf: &mut [u8]) -> usize {
         match self {
             QuackWrapper::PowerSum(q) => {
@@ -245,6 +231,19 @@ impl QuackWrapper {
             QuackWrapper::IBLT(q) => {
                 buf[0] = 1;
                 1 + q.serialize(&mut buf[1..])
+            },
+        }
+    }
+
+    pub fn serialize_with_hint(&self, buf: &mut [u8], num_missing: usize) -> usize {
+        match self {
+            QuackWrapper::PowerSum(q) => {
+                buf[0] = 0;
+                1 + q.serialize_with_hint(&mut buf[1..], num_missing)
+            },
+            QuackWrapper::IBLT(q) => {
+                buf[0] = 1;
+                1 + q.serialize_with_hint(&mut buf[1..], num_missing)
             },
         }
     }
@@ -295,13 +294,12 @@ mod test {
         q1.insert(2);
         q1.insert(3);
         let len = q1.serialize(&mut buf);
-        assert_eq!(len, 1 + 4 + 4 + 4*10);
+        // 4 bytes per power sum (4-byte identifier)
+        assert_eq!(len, 9+4*10);
         let q2 = QuackWrapper::deserialize(&buf[..len]);
         assert_eq!(q1.count(), q2.count());
         assert_eq!(q1.last_value(), q2.last_value());
-        let q1_inner = q1.psum_inner();
-        let q2_inner = q2.psum_inner();
-        assert_eq!(q1_inner.to_coeffs(), q2_inner.to_coeffs());
+        assert_eq!(q1, q2);
     }
 
     #[test]
@@ -312,12 +310,51 @@ mod test {
         q1.insert(2);
         q1.insert(3);
         let len = q1.serialize(&mut buf);
-        assert_eq!(len, 1 + 4 + 4 + 5*10);
+        // 5 bytes per CodedSymbol (4-byte identifier + 1-byte count)
+        assert_eq!(len, 9+5*10);
         let q2 = QuackWrapper::deserialize(&buf[..len]);
         assert_eq!(q1.count(), q2.count());
         assert_eq!(q1.last_value(), q2.last_value());
-        let q1_inner = q1.iblt_inner();
-        let q2_inner = q2.iblt_inner();
-        assert_eq!(q1_inner.sketch(), q2_inner.sketch());
+        assert_eq!(q1, q2);
+    }
+
+    #[test]
+    fn test_de_serialize_with_hint_psum_quack_enum() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = QuackWrapper::PowerSum(PowerSumQuackU32::new(10));
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+
+        // serialize
+        let num_symbols = 3; // the hint
+        let len = q1.serialize_with_hint(&mut buf, num_symbols);
+        assert_eq!(len, 9+4*num_symbols);
+
+        // deserialize
+        let q2 = QuackWrapper::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        assert_ne!(q1, q2);
+    }
+
+    #[test]
+    fn test_de_serialize_with_hint_iblt_quack_enum() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = QuackWrapper::IBLT(IBLTQuackU32::new(10));
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+
+        // serialize
+        let num_symbols = 3; // the hint
+        let len = q1.serialize_with_hint(&mut buf, num_symbols);
+        assert_eq!(len, 9+5*num_symbols);
+
+        // deserialize
+        let q2 = QuackWrapper::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        assert_ne!(q1, q2);
     }
 }

@@ -15,7 +15,7 @@ cfg_montgomery! {
 }
 
 /// 32-bit power sum quACK.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PowerSumQuackU32 {
     power_sums: Vec<ModularInteger<u32>>,
     last_value: Option<ModularInteger<u32>>,
@@ -206,6 +206,19 @@ impl PowerSumQuackU32 {
         buf[0..4].copy_from_slice(&self.count.to_le_bytes());
         buf[4..8].copy_from_slice(&self.last_value.unwrap().value().to_le_bytes());
         let n = std::mem::size_of::<ModularInteger<u32>>() * self.power_sums.len();
+        let src = self.power_sums.as_ptr() as *const u8;
+        let dst = (&mut buf[8..]).as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        n + 8
+    }
+
+    pub fn serialize_with_hint(&self, buf: &mut [u8], num_symbols: usize) -> usize {
+        buf[0..4].copy_from_slice(&self.count.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.last_value.unwrap().value().to_le_bytes());
+        let num_symbols = std::cmp::min(self.power_sums.len(), num_symbols);
+        let n = std::mem::size_of::<ModularInteger<u32>>() * num_symbols;
         let src = self.power_sums.as_ptr() as *const u8;
         let dst = (&mut buf[8..]).as_mut_ptr();
         unsafe {
@@ -652,6 +665,38 @@ mod test {
             quack.decode_with_log(&[R1, R5, R2, R3, R4]),
             vec![R1, R2, R3]
         );
+    }
+
+    #[test]
+    fn test_serialize_and_deserialize_u32() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = PowerSumQuackU32::new(10);
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        let len = q1.serialize(&mut buf);
+        assert_eq!(len, 8+4*10);
+        let q2 = PowerSumQuackU32::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        assert_eq!(q1.to_coeffs(), q2.to_coeffs());
+    }
+
+    #[test]
+    fn test_serialize_with_hint_u32() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = PowerSumQuackU32::new(10);
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        let num_symbols = 3;
+        let len = q1.serialize_with_hint(&mut buf, num_symbols);
+        assert_eq!(len, 8+4*num_symbols);
+        let q2 = PowerSumQuackU32::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        assert_eq!(q1.power_sums.len(), 10);
+        assert_eq!(q2.power_sums.len(), num_symbols);
     }
 
     #[test]

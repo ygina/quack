@@ -11,7 +11,7 @@ use super::decoder::Decoder;
 
 use crate::Quack;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IBLTQuackU32 {
     sketch: Vec<CodedSymbol>,
     last_value: Option<HashType>,
@@ -98,14 +98,23 @@ impl IBLTQuackU32 {
         }
     }
 
-    pub fn sketch(&self) -> &Vec<CodedSymbol> {
-        &self.sketch
-    }
-
     pub fn serialize(&self, buf: &mut [u8]) -> usize {
         buf[0..4].copy_from_slice(&self.count.to_le_bytes());
         buf[4..8].copy_from_slice(&self.last_value.unwrap().to_le_bytes());
         let n = std::mem::size_of::<CodedSymbol>() * self.sketch.len();
+        let src = self.sketch.as_ptr() as *const u8;
+        let dst = (&mut buf[8..]).as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        n + 8
+    }
+
+    pub fn serialize_with_hint(&self, buf: &mut [u8], num_symbols: usize) -> usize {
+        buf[0..4].copy_from_slice(&self.count.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.last_value.unwrap().to_le_bytes());
+        let num_symbols = std::cmp::min(self.sketch.len(), num_symbols);
+        let n = std::mem::size_of::<CodedSymbol>() * num_symbols;
         let src = self.sketch.as_ptr() as *const u8;
         let dst = (&mut buf[8..]).as_mut_ptr();
         unsafe {
@@ -166,5 +175,37 @@ mod test{
             assert_eq!(res.len(), nlocal,
                 "(size={}) missing symbols: {} local", size, res.len());
         }
+    }
+
+    #[test]
+    fn test_serialize_and_deserialize() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = IBLTQuackU32::new(10);
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        let len = q1.serialize(&mut buf);
+        assert_eq!(len, 8+5*10);
+        let q2 = IBLTQuackU32::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        assert_eq!(q1.sketch, q2.sketch);
+    }
+
+    #[test]
+    fn test_serialize_with_hint() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = IBLTQuackU32::new(10);
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        let num_symbols = 3;
+        let len = q1.serialize_with_hint(&mut buf, num_symbols);
+        assert_eq!(len, 8+5*num_symbols);
+        let q2 = IBLTQuackU32::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        assert_eq!(q1.sketch.len(), 10);
+        assert_eq!(q2.sketch.len(), num_symbols);
     }
 }
