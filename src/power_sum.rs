@@ -1,8 +1,10 @@
 use crate::arithmetic::{self, CoefficientVector, ModularArithmetic, ModularInteger};
 use crate::precompute::INVERSE_TABLE_U32;
 use crate::Quack;
-use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+
+#[cfg(any(feature = "power_table", feature = "montgomery", doc))]
+use serde::{Deserialize, Serialize};
 
 cfg_power_table! {
     use crate::precompute::INVERSE_TABLE_U16;
@@ -13,7 +15,7 @@ cfg_montgomery! {
 }
 
 /// 32-bit power sum quACK.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct PowerSumQuackU32 {
     power_sums: Vec<ModularInteger<u32>>,
     last_value: Option<ModularInteger<u32>>,
@@ -196,6 +198,36 @@ impl PowerSumQuack for PowerSumQuackU32 {
             .filter(|&&x| arithmetic::eval(&coeffs, x).value() == 0)
             .copied()
             .collect()
+    }
+}
+
+impl PowerSumQuackU32 {
+    pub fn serialize(&self, buf: &mut [u8]) -> usize {
+        buf[0..4].copy_from_slice(&self.count.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.last_value.unwrap().value().to_le_bytes());
+        let n = std::mem::size_of::<ModularInteger<u32>>() * self.power_sums.len();
+        let src = self.power_sums.as_ptr() as *const u8;
+        let dst = (&mut buf[8..]).as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        n + 8
+    }
+
+    pub fn deserialize(buf: &[u8]) -> Self {
+        let n = (buf.len() - 8) / std::mem::size_of::<ModularInteger<u32>>();
+        let mut power_sums = Vec::with_capacity(n);
+        let src: *const ModularInteger<u32> = (&buf[8..]).as_ptr() as _;
+        let dst: *mut ModularInteger<u32> = power_sums.as_mut_ptr();
+        unsafe {
+            power_sums.set_len(n);
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        Self {
+            count: u32::from_le_bytes(buf[0..4].try_into().unwrap()),
+            last_value: Some(ModularInteger::new(u32::from_le_bytes(buf[4..8].try_into().unwrap()))),
+            power_sums,
+        }
     }
 }
 
@@ -676,44 +708,6 @@ mod test {
         assert_eq!(quack.last_value(), None);
         assert_eq!(quack.to_coeffs().len(), 3);
         assert_eq!(quack.decode_with_log(&[1, 2, 3, 4, 5]), vec![3, 4, 5]);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_quack_serialize_u32() {
-        let mut quack = PowerSumQuackU32::new(10);
-        let bytes = bincode::serialize(&quack).unwrap();
-        // expected length is 4*10+2 = 42 bytes (ten u32 sums and a u16 count)
-        // TODO: extra 8 bytes from bincode
-        assert_eq!(bytes.len(), 42);
-        assert_eq!(&bytes[..], &[0; 42], "no data yet");
-        quack.insert(1);
-        quack.insert(2);
-        quack.insert(3);
-        let bytes = bincode::serialize(&quack).unwrap();
-        assert_eq!(bytes.len(), 42);
-        assert_ne!(&bytes[..], &[0; 42]);
-    }
-
-    #[test]
-    fn test_quack_deserialize_empty_u32() {
-        let q1 = PowerSumQuackU32::new(10);
-        let bytes = bincode::serialize(&q1).unwrap();
-        let q2: PowerSumQuackU32 = bincode::deserialize(&bytes).unwrap();
-        assert_eq!(q1.count(), q2.count());
-        assert_eq!(q1.to_coeffs(), q2.to_coeffs());
-    }
-
-    #[test]
-    fn test_quack_deserialize_with_data_u32() {
-        let mut q1 = PowerSumQuackU32::new(10);
-        q1.insert(1);
-        q1.insert(2);
-        q1.insert(3);
-        let bytes = bincode::serialize(&q1).unwrap();
-        let q2: PowerSumQuackU32 = bincode::deserialize(&bytes).unwrap();
-        assert_eq!(q1.count(), q2.count());
-        assert_eq!(q1.to_coeffs(), q2.to_coeffs());
     }
 
     #[ignore]

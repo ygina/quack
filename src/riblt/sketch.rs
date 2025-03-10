@@ -9,10 +9,9 @@ use super::symbol::{CodedSymbol, ADD, REMOVE};
 use super::mapping::RandomMapping;
 use super::decoder::Decoder;
 
-use serde::{Deserialize, Serialize};
 use crate::Quack;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct IBLTQuackU32 {
     sketch: Vec<CodedSymbol>,
     last_value: Option<HashType>,
@@ -96,6 +95,39 @@ impl IBLTQuackU32 {
             Some(dec.remote())
         } else {
             None
+        }
+    }
+
+    pub fn sketch(&self) -> &Vec<CodedSymbol> {
+        &self.sketch
+    }
+
+    pub fn serialize(&self, buf: &mut [u8]) -> usize {
+        buf[0..4].copy_from_slice(&self.count.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.last_value.unwrap().to_le_bytes());
+        let n = std::mem::size_of::<CodedSymbol>() * self.sketch.len();
+        let src = self.sketch.as_ptr() as *const u8;
+        let dst = (&mut buf[8..]).as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        n + 8
+    }
+
+    pub fn deserialize(buf: &[u8]) -> Self {
+        let n = (buf.len() - 8) / std::mem::size_of::<CodedSymbol>();
+        let mut sketch = Vec::with_capacity(n);
+        let src = (&buf[8..]).as_ptr() as *const CodedSymbol;
+        let dst = sketch.as_mut_ptr();
+        unsafe {
+            sketch.set_len(n);
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+
+        Self {
+            count: u32::from_le_bytes(buf[0..4].try_into().unwrap()),
+            last_value: Some(u32::from_le_bytes(buf[4..8].try_into().unwrap())),
+            sketch,
         }
     }
 }

@@ -7,7 +7,8 @@ pub const ADD: Direction = 1;
 pub const REMOVE: Direction = u8::MAX;
 
 /// CodedSymbol is a coded symbol produced by a Rateless IBLT encoder.
-#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize)]
+#[repr(C, packed)]
+#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CodedSymbol {
     pub hash: HashType,
     pub count: u8,

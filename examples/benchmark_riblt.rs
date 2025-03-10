@@ -19,6 +19,7 @@ const NUM_ERRORS: [usize; 10] = [
     1, 2, 4, 8, 16, 20, 40, 80, 160, u8::MAX as usize,
 ];
 
+const BUFFER_SIZE: usize = 1500;
 const TARGET_DURATION_MS: u64 = 100;
 
 #[derive(Parser, Debug)]
@@ -142,11 +143,12 @@ fn benchmark_encode(
     let t2 = Instant::now();
 
     // Set the result
+    let mut buf = [0u8; BUFFER_SIZE];
     let mut result = EncodeBenchmarkResult::new(quack_ty);
     result.num_symbols = num_symbols;
     result.num_iters = num_iters;
     result.time = t2 - t1;
-    result.nbytes = q.serialize().len();
+    result.nbytes = q.serialize(&mut buf[..]);
     Box::new(result)
 }
 

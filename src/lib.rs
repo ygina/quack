@@ -123,9 +123,7 @@ pub trait Quack {
     fn sub(self, rhs: &Self) -> Self;
 }
 
-use serde::{Serialize, Deserialize};
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug)]
 pub enum QuackWrapper {
     PowerSum(PowerSumQuackU32),
     IBLT(IBLTQuackU32),
@@ -224,12 +222,39 @@ impl QuackWrapper {
         }
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
+    pub fn psum_inner(&self) -> &PowerSumQuackU32 {
+        match self {
+            QuackWrapper::PowerSum(inner) => inner,
+            QuackWrapper::IBLT(_) => panic!("bad quack type"),
+        }
+    }
+
+    pub fn iblt_inner(&self) -> &IBLTQuackU32 {
+        match self {
+            QuackWrapper::IBLT(inner) => inner,
+            QuackWrapper::PowerSum(_) => panic!("bad quack type"),
+        }
+    }
+
+    pub fn serialize(&self, buf: &mut [u8]) -> usize {
+        match self {
+            QuackWrapper::PowerSum(q) => {
+                buf[0] = 0;
+                1 + q.serialize(&mut buf[1..])
+            },
+            QuackWrapper::IBLT(q) => {
+                buf[0] = 1;
+                1 + q.serialize(&mut buf[1..])
+            },
+        }
     }
 
     pub fn deserialize(buf: &[u8]) -> Self {
-        bincode::deserialize(buf).unwrap()
+        match buf[0] {
+            0 => QuackWrapper::PowerSum(PowerSumQuackU32::deserialize(&buf[1..])),
+            1 => QuackWrapper::IBLT(IBLTQuackU32::deserialize(&buf[1..])),
+            _ => panic!("invalid quack type")
+        }
     }
 }
 
@@ -257,3 +282,42 @@ cfg_power_table! {
 }
 
 mod ffi;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_de_serialize_psum_quack_enum() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = QuackWrapper::PowerSum(PowerSumQuackU32::new(10));
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        let len = q1.serialize(&mut buf);
+        assert_eq!(len, 1 + 4 + 4 + 4*10);
+        let q2 = QuackWrapper::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        let q1_inner = q1.psum_inner();
+        let q2_inner = q2.psum_inner();
+        assert_eq!(q1_inner.to_coeffs(), q2_inner.to_coeffs());
+    }
+
+    #[test]
+    fn test_de_serialize_iblt_quack_enum() {
+        let mut buf = [0u8; 1500];
+        let mut q1 = QuackWrapper::IBLT(IBLTQuackU32::new(10));
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        let len = q1.serialize(&mut buf);
+        assert_eq!(len, 1 + 4 + 4 + 5*10);
+        let q2 = QuackWrapper::deserialize(&buf[..len]);
+        assert_eq!(q1.count(), q2.count());
+        assert_eq!(q1.last_value(), q2.last_value());
+        let q1_inner = q1.iblt_inner();
+        let q2_inner = q2.iblt_inner();
+        assert_eq!(q1_inner.sketch(), q2_inner.sketch());
+    }
+}
