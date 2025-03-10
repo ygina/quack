@@ -45,6 +45,8 @@ struct EncodeBenchmarkResult {
     num_iters: usize,
     // Total time
     time: Duration,
+    // Total number of bytes of a serialized quack
+    nbytes: usize,
 }
 
 impl BenchmarkResult for EncodeBenchmarkResult {
@@ -54,6 +56,7 @@ impl BenchmarkResult for EncodeBenchmarkResult {
             num_symbols: 0,
             num_iters: 0,
             time: Duration::from_secs(0),
+            nbytes: 0,
         }
     }
 
@@ -62,9 +65,10 @@ impl BenchmarkResult for EncodeBenchmarkResult {
     }
 
     fn print(&self) {
-        println!("Benchmark{:?}Encode/m={:<10}{:8}{:>13}ns/op",
+        println!("Benchmark{:?}Encode/m={:<10}{:8}{:>13}ns/op{:12} bytes",
             self.ty, self.num_symbols, self.num_iters,
-            (self.time / (self.num_iters as u32)).as_nanos());
+            (self.time / (self.num_iters as u32)).as_nanos(),
+            self.nbytes);
     }
 }
 
@@ -133,6 +137,7 @@ fn benchmark_encode(
     result.num_symbols = num_symbols;
     result.num_iters = num_iters;
     result.time = t2 - t1;
+    result.nbytes = q.serialize().len();
     Box::new(result)
 }
 
