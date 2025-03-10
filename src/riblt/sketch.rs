@@ -5,7 +5,7 @@
 //! sum quACK implementation in Go is available here:
 //! https://github.com/ygina/subset-reconciliation/.
 use super::HashType;
-use super::symbol::CodedSymbol;
+use super::symbol::{CodedSymbol, ADD, REMOVE};
 use super::mapping::RandomMapping;
 use super::decoder::Decoder;
 
@@ -43,13 +43,12 @@ impl Quack for IBLTQuackU32 {
     }
 
     fn insert(&mut self, t: HashType) {
-        self.count += 1;
+        self.count = self.count.wrapping_add(1);
         self.last_value = Some(t);
         let mut m = RandomMapping::new(t);
         while (m.last_index as usize) < self.sketch.len() {
             let idx = m.last_index as usize;
-            self.sketch[idx].count += 1;
-            self.sketch[idx].hash ^= t;
+            self.sketch[idx].apply(t, ADD);
             m.next_index();
         }
     }
@@ -57,12 +56,11 @@ impl Quack for IBLTQuackU32 {
     /// Remove an element in the quACK. Does not validate that the element
     /// had actually been inserted in the quACK.
     fn remove(&mut self, t: HashType) {
-        self.count -= 1;
+        self.count = self.count.wrapping_sub(1);
         let mut m = RandomMapping::new(t);
         while (m.last_index as usize) < self.sketch.len() {
             let idx = m.last_index as usize;
-            self.sketch[idx].count -= 1;
-            self.sketch[idx].hash ^= t;
+            self.sketch[idx].apply(t, REMOVE);
             m.next_index();
         }
     }
@@ -75,11 +73,11 @@ impl Quack for IBLTQuackU32 {
         if self.count < s2.count {
             panic!("too many packets in rhs quack");
         }
-        self.count -= s2.count;
+        self.count = self.count.wrapping_sub(s2.count);
 
         for i in 0..self.sketch.len() {
-            self.sketch[i].count -= s2.sketch[i].count;
-            self.sketch[i].hash ^= s2.sketch[i].hash;
+            let x = s2.sketch[i];
+            self.sketch[i].apply(x.hash, x.count.wrapping_neg());
         }
     }
 
@@ -91,15 +89,11 @@ impl Quack for IBLTQuackU32 {
 }
 
 impl IBLTQuackU32 {
-    pub fn decode(&self) -> Option<Vec<HashType>> {
-        let mut dec = Decoder::default();
-        for &c in &self.sketch {
-            dec.add_coded_symbol(c);
-        }
+    pub fn decode(self) -> Option<Vec<HashType>> {
+        let mut dec = Decoder::new(self.sketch);
         dec.try_decode();
         if dec.decoded() {
-            let (_, remote) = dec.local_remote();
-            Some(remote)
+            Some(dec.remote())
         } else {
             None
         }
@@ -112,7 +106,7 @@ mod test{
 
     #[test]
     fn test_fixed_encode_and_decode() {
-        let sizes = vec![10, 20, 40, 100, 1000, 10000, 50000, 100000];
+        let sizes = vec![10, 20, 40, 100, 200, u8::MAX.into()];
         for size in sizes {
             let nlocal = size;
             let ncommon = size;
