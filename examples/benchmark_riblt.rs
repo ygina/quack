@@ -2,10 +2,19 @@ use std::time::{Instant, Duration};
 use clap::{Parser, ValueEnum};
 use quack::{PowerSumQuack, PowerSumQuackU32, Quack, IBLTQuackU32, QuackWrapper};
 
-const NUM_SYMBOLS: [usize; 11] = [
-    10, 20, 40, 80, 160, 320, 1000, 10000, 100000, 1000000, 10000000,
+// Since a single quACK needs to fit in a packet MTU, for a 1500-byte MTU and
+// 42-byte UDP header payload offset, we have a 1458-byte UDP payload. There
+// are 4 bytes for the packet count, and 4 bytes for the last inserted value.
+// Each coded symbol is 5 bytes (4-byte identifier and 1-byte count), leaving
+// generously at most (1458-8)/5 = 290 source symbols at most.
+const NUM_SYMBOLS: [usize; 8] = [
+    10, 20, 40, 80, 160, 200, 240, 280,
 ];
 
+// The quACK requires at least one source symbol per error to decode---this is
+// a theoretical bound---so the 290 source symbols is also an upper bound on
+// the number of errors. Hence, we use 1 byte for the coded symbol count which
+// is slightly less than 290.
 const NUM_ERRORS: [usize; 10] = [
     1, 2, 4, 8, 16, 20, 40, 80, 160, (u8::MAX - 1) as usize,
 ];
