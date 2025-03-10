@@ -6,8 +6,8 @@ const NUM_SYMBOLS: [usize; 11] = [
     10, 20, 40, 80, 160, 320, 1000, 10000, 100000, 1000000, 10000000,
 ];
 
-const NUM_ERRORS: [usize; 11] = [
-    1, 2, 4, 8, 10, 20, 40, 80, 160, 320, 1000,
+const NUM_ERRORS: [usize; 10] = [
+    1, 2, 4, 8, 16, 20, 40, 80, 160, (u8::MAX - 1) as usize,
 ];
 
 const TARGET_DURATION_MS: u64 = 100;

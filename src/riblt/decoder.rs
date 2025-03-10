@@ -1,5 +1,5 @@
 use super::HashType;
-use super::symbol::{CodedSymbol, REMOVE, ADD};
+use super::symbol::{CodedSymbol, Direction, REMOVE, ADD};
 use super::mapping::RandomMapping;
 use super::encoder::CodingWindow;
 
@@ -48,14 +48,14 @@ impl Decoder {
         // insert the new coded c
         self.cs.push(c);
         // check if the coded c is decodable, and insert into decodable list if so
-        if c.count == 1 || c.count == -1 {
+        if c.count == ADD || c.count == REMOVE {
             self.decodable.push(self.cs.len() - 1);
         } else if c.count == 0 && c.hash == 0 {
             self.decodable.push(self.cs.len() - 1);
         }
     }
 
-    fn apply_new_symbol(&mut self, t: HashType, direction: i64) -> RandomMapping {
+    fn apply_new_symbol(&mut self, t: HashType, direction: Direction) -> RandomMapping {
         let mut m = RandomMapping::new(t);
         while (m.last_index as usize) < self.cs.len() {
             let cidx = m.last_index as usize;
@@ -79,7 +79,7 @@ impl Decoder {
             // duplicates. On the other hand, it is fine that we insert all
             // degree-1 or -1 decodable symbols, because we only see them in such
             // state once.
-            if self.cs[cidx].count == -1 || self.cs[cidx].count == 1 {
+            if self.cs[cidx].count == REMOVE || self.cs[cidx].count == ADD {
                 self.decodable.push(cidx);
             }
             m.next_index();
@@ -108,7 +108,7 @@ impl Decoder {
                 let m = self.apply_new_symbol(ns, REMOVE);
                 self.remote.add_hash_with_mapping(ns, m);
                 self.decoded += 1;
-            } else if c.count == -1 {
+            } else if c.count == REMOVE {
                 panic!("only handle subset reconciliation");
             } else if c.count == 0 {
                 self.decoded += 1;
