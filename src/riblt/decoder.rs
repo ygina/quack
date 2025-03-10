@@ -1,7 +1,6 @@
 use super::HashType;
 use super::symbol::{CodedSymbol, Direction, REMOVE};
 use super::mapping::RandomMapping;
-use super::encoder::CodingWindow;
 
 // Decoder computes the symmetric difference between two sets A, B. The Decoder
 // knows B (the local set) and expects coded symbols for A (the remote set).
@@ -9,8 +8,8 @@ use super::encoder::CodingWindow;
 pub struct Decoder {
     /// coded symbols received so far
     cs: Vec<CodedSymbol>,
-    /// set of source symbols that are exclusive to the encoder
-    remote: CodingWindow,
+    /// decoded ientifiers
+    remote: Vec<u32>,
     /// indices of coded symbols that can be decoded, i.e., degree equal to -1
     /// or 1 or degree equal to 0 and sum of hash equal to 0
     decodable: Vec<usize>,
@@ -29,7 +28,7 @@ impl Decoder {
                 .map(|(i, _)| i)
                 .collect(),
             cs,
-            remote: CodingWindow::default(),
+            remote: vec![],
             decoded: 0,
         }
     }
@@ -42,7 +41,7 @@ impl Decoder {
 
     /// The list of source symbols that are present in A but not in B.
     pub fn remote(self) -> Vec<HashType> {
-        self.remote.symbols
+        self.remote
     }
 
     /// AddCodedSymbol passes the next coded symbol in A's sequence to the
@@ -109,8 +108,8 @@ impl Decoder {
                 // guaranted to copy the sum whether or not the symbol
                 // interface is implemented as a pointer
                 let ns = c.hash;
-                let m = self.apply_new_symbol(ns, REMOVE);
-                self.remote.add_hash_with_mapping(ns, m);
+                self.apply_new_symbol(ns, REMOVE);
+                self.remote.push(ns);
                 self.decoded += 1;
             } else if c.count == 0 {
                 self.decoded += 1;
