@@ -94,6 +94,18 @@ elements in a received quACK(s), given the `n` sent packets.
 serialize a quACK(s) when multiplexing quACKs across multiple connections using
 a hash table.
 
+Run benchmark comparisons to our equivalent Rust implementation of
+[Rateless IBLT](https://github.com/yangl1996/riblt) from the paper Practical
+Rateless Set Reconciliation by Lei Yang, Yossi Gilad, and Mohammad Alizadeh,
+which appeared in ACM SIGCOMM 2024. Adapted from our equivalent Go comparisons
+of the rateless IBLT and our power sum quACK [here](https://github.com/ygina/subset-reconciliation).
+
+```
+cargo build --release --example benchmark_riblt
+./target/release/examples/benchmark_riblt power-sum --encode --decode
+./target/release/examples/benchmark_riblt riblt --encode --decode
+```
+
 ## C Bindings
 
 A dynamic C library and header file for a subset of the library functions are

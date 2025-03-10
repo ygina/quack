@@ -1,5 +1,6 @@
 use crate::arithmetic::{self, CoefficientVector, ModularArithmetic, ModularInteger};
 use crate::precompute::INVERSE_TABLE_U32;
+use crate::Quack;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -32,48 +33,9 @@ pub struct PowerSumQuackU32 {
 /// The underlying representation of a power sum quACK is a `threshold` number
 /// of power sums. If `X` is the multiset of elements in the quACK, then the
 /// `i`-th power sum is just the sum of `x^i` for all `x` in `X`.
-pub trait PowerSumQuack {
-    /// The type of element that can be inserted in the quACK.
-    type Element;
-
+pub trait PowerSumQuack: Quack {
     /// The modular version of the elements in the quACK.
     type ModularElement;
-
-    /// Creates a new power sum quACK that can decode at most `threshold`
-    /// number of elements.
-    fn new(threshold: usize) -> Self
-    where
-        Self: Sized;
-
-    /// The maximum number of elements that can be decoded by the quACK.
-    fn threshold(&self) -> usize;
-
-    /// The number of elements represented by the quACK.
-    fn count(&self) -> u32;
-
-    /// The last element inserted in the quACK, if known.
-    ///
-    /// If `None`, either there are no elements in the quACK, or a previous last
-    /// element was removed and the actual last element is unknown.
-    fn last_value(&self) -> Option<Self::Element>;
-
-    /// Insert an element in the quACK.
-    fn insert(&mut self, value: Self::Element);
-
-    /// Remove an element in the quACK. Does not validate that the element
-    /// had actually been inserted in the quACK.
-    fn remove(&mut self, value: Self::Element);
-
-    /// Decode the elements in the log that in the quACK.
-    ///
-    /// This method evaluates the polynomial derived from the power sums in the
-    /// quACK at each of the candidate roots in the log, returning the roots.
-    /// If a root appears more than once in the log, it will appear the same
-    /// number of times in the returned roots. Note that the decoding method
-    /// does not consider the root multiplicity in the polynomial. If the log is
-    /// incomplete, there will be fewer roots returned than the actual number of
-    /// elements represented by the quACK.
-    fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element>;
 
     /// Convert the `n` modular power sums that represent the elements in the
     /// quACK to a degree-`n` polynomial in the same field. The polynomial is
@@ -83,7 +45,7 @@ pub trait PowerSumQuack {
     /// # Examples
     ///
     /// ```
-    /// use quack::{PowerSumQuack, PowerSumQuackU32};
+    /// use quack::{Quack, PowerSumQuack, PowerSumQuackU32};
     /// use quack::arithmetic::{ModularInteger, ModularArithmetic};
     ///
     /// const THRESHOLD: usize = 20;
@@ -115,55 +77,20 @@ pub trait PowerSumQuack {
     /// but reuses the same vector allocation to return the coefficients.
     fn to_coeffs_preallocated(&self, coeffs: &mut CoefficientVector<Self::ModularElement>);
 
-    /// Subtracts another power sum quACK from this power sum quACK.
+    /// Decode the elements in the log that in the quACK.
     ///
-    /// The difference between a quACK with `x` elements and a quACK with `y`
-    /// elements is a quACK with `x - y` elements. Assumes the elements in the
-    /// second quACK are a subset of the elements in the first quACK. Assumes
-    /// the two quACKs have the same threshold. If these conditions are met,
-    /// then the `x - y` elements in the difference represent the set
-    /// difference, and can be decoded from the quACK as long as this number of
-    /// elements does not exceed the threshold.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use quack::{PowerSumQuack, PowerSumQuackU32};
-    /// use quack::arithmetic::{ModularInteger, ModularArithmetic};
-    ///
-    /// const THRESHOLD: usize = 20;
-    ///
-    /// fn main() {
-    ///     // Insert some elements in the first quACK.
-    ///     let mut quack1 = PowerSumQuackU32::new(THRESHOLD);
-    ///     quack1.insert(1);
-    ///     quack1.insert(2);
-    ///     quack1.insert(3);
-    ///     quack1.insert(4);
-    ///     quack1.insert(5);
-    ///
-    ///     // Insert a subset of the same elements in the second quACK.
-    ///     let mut quack2 = PowerSumQuackU32::new(THRESHOLD);
-    ///     quack2.insert(2);
-    ///     quack2.insert(5);
-    ///
-    ///     // Subtract the second quACK from the first and decode the elements.
-    ///     quack1.sub_assign(quack2);
-    ///     let mut roots = quack1.decode_with_log(&[1, 2, 3, 4, 5]);
-    ///     roots.sort();
-    ///     assert_eq!(roots, vec![1, 3, 4]);
-    /// }
-    /// ```
-    fn sub_assign(&mut self, rhs: Self);
-
-    /// Similar to [sub_assign](trait.PowerSumQuack.html#method.sub_assign)
-    /// but returns the difference as a new quACK.
-    fn sub(self, rhs: Self) -> Self;
+    /// This method evaluates the polynomial derived from the power sums in the
+    /// quACK at each of the candidate roots in the log, returning the roots.
+    /// If a root appears more than once in the log, it will appear the same
+    /// number of times in the returned roots. Note that the decoding method
+    /// does not consider the root multiplicity in the polynomial. If the log is
+    /// incomplete, there will be fewer roots returned than the actual number of
+    /// elements represented by the quACK.
+    fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element>;
 }
 
-impl PowerSumQuack for PowerSumQuackU32 {
+impl Quack for PowerSumQuackU32 {
     type Element = u32;
-    type ModularElement = ModularInteger<Self::Element>;
 
     fn new(threshold: usize) -> Self {
         Self {
@@ -215,51 +142,29 @@ impl PowerSumQuack for PowerSumQuackU32 {
         }
     }
 
-    fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
-        if self.count() == 0 {
-            return log.to_vec();
+    fn sub_assign(&mut self, rhs: &Self) {
+        assert_eq!(
+            self.threshold(),
+            rhs.threshold(),
+            "expected subtracted quacks to have the same threshold"
+        );
+        for (i, sum) in self.power_sums.iter_mut().enumerate() {
+            sum.sub_assign(rhs.power_sums[i]);
         }
-        let coeffs = self.to_coeffs();
-        log.iter()
-            .filter(|&&x| arithmetic::eval(&coeffs, x).value() == 0)
-            .copied()
-            .collect()
+        self.count = self.count.wrapping_sub(rhs.count);
+        self.last_value = None;
     }
 
-    /// Convert the `n` modular power sums that represent the elements in the
-    /// quACK to a degree-`n` polynomial in the same field. The polynomial is
-    /// represented by a vector of coefficients, and the coefficients are
-    /// calculated using [Newton's identities](https://en.wikipedia.org/wiki/Newton%27s_identities).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use quack::{PowerSumQuack, PowerSumQuackU32};
-    /// use quack::arithmetic::{ModularInteger, ModularArithmetic};
-    ///
-    /// const THRESHOLD: usize = 20;
-    /// const ROOT1: u32 = 10;
-    /// const ROOT2: u32 = 12;
-    ///
-    /// fn main() {
-    ///     // Polynomial with degree 1
-    ///     let mut quack = PowerSumQuackU32::new(THRESHOLD);
-    ///     quack.insert(ROOT1);
-    ///     let coeffs = quack.to_coeffs();  // x - 10
-    ///     assert_eq!(coeffs.len(), 1);
-    ///     assert_eq!(coeffs, vec![ModularInteger::<u32>::new(ROOT1).neg()]);
-    ///
-    ///     // Polynomial with degree 2
-    ///     quack.insert(ROOT2);
-    ///     let coeffs = quack.to_coeffs();  // x^2 - 24x + 120
-    ///     let mut quack1 = PowerSumQuackU32::new(THRESHOLD);
-    ///     assert_eq!(coeffs.len(), 2);
-    ///     assert_eq!(coeffs, vec![
-    ///         ModularInteger::<u32>::new(ROOT1 + ROOT2).neg(),
-    ///         ModularInteger::<u32>::new(ROOT1 * ROOT2),
-    ///     ]);
-    /// }
-    /// ```
+    fn sub(self, rhs: &Self) -> Self {
+        let mut result = self;
+        result.sub_assign(rhs);
+        result
+    }
+}
+
+impl PowerSumQuack for PowerSumQuackU32 {
+    type ModularElement = ModularInteger<Self::Element>;
+
     fn to_coeffs(&self) -> CoefficientVector<Self::ModularElement> {
         let mut coeffs = (0..self.count())
             .map(|_| ModularInteger::new(0))
@@ -282,62 +187,15 @@ impl PowerSumQuack for PowerSumQuackU32 {
         }
     }
 
-    /// Subtracts another power sum quACK from this power sum quACK.
-    ///
-    /// The difference between a quACK with `x` elements and a quACK with `y`
-    /// elements is a quACK with `x - y` elements. Assumes the elements in the
-    /// second quACK are a subset of the elements in the first quACK. Assumes
-    /// the two quACKs have the same threshold. If these conditions are met,
-    /// then the `x - y` elements in the difference represent the set
-    /// difference, and can be decoded from the quACK as long as this number of
-    /// elements does not exceed the threshold.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use quack::{PowerSumQuack, PowerSumQuackU32};
-    /// use quack::arithmetic::{ModularInteger, ModularArithmetic};
-    ///
-    /// const THRESHOLD: usize = 20;
-    ///
-    /// fn main() {
-    ///     // Insert some elements in the first quACK.
-    ///     let mut quack1 = PowerSumQuackU32::new(THRESHOLD);
-    ///     quack1.insert(1);
-    ///     quack1.insert(2);
-    ///     quack1.insert(3);
-    ///     quack1.insert(4);
-    ///     quack1.insert(5);
-    ///
-    ///     // Insert a subset of the same elements in the second quACK.
-    ///     let mut quack2 = PowerSumQuackU32::new(THRESHOLD);
-    ///     quack2.insert(2);
-    ///     quack2.insert(5);
-    ///
-    ///     // Subtract the second quACK from the first and decode the elements.
-    ///     quack1.sub_assign(quack2);
-    ///     let mut roots = quack1.decode_with_log(&[1, 2, 3, 4, 5]);
-    ///     roots.sort();
-    ///     assert_eq!(roots, vec![1, 3, 4]);
-    /// }
-    /// ```
-    fn sub_assign(&mut self, rhs: Self) {
-        assert_eq!(
-            self.threshold(),
-            rhs.threshold(),
-            "expected subtracted quacks to have the same threshold"
-        );
-        for (i, sum) in self.power_sums.iter_mut().enumerate() {
-            sum.sub_assign(rhs.power_sums[i]);
+    fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
+        if self.count() == 0 {
+            return vec![];
         }
-        self.count = self.count.wrapping_sub(rhs.count);
-        self.last_value = None;
-    }
-
-    fn sub(self, rhs: Self) -> Self {
-        let mut result = self;
-        result.sub_assign(rhs);
-        result
+        let coeffs = self.to_coeffs();
+        log.iter()
+            .filter(|&&x| arithmetic::eval(&coeffs, x).value() == 0)
+            .copied()
+            .collect()
     }
 }
 
@@ -370,9 +228,8 @@ cfg_montgomery! {
         count: u32,
     }
 
-    impl PowerSumQuack for PowerSumQuackU64 {
+    impl Quack for PowerSumQuackU64 {
         type Element = u64;
-        type ModularElement = ModularInteger<Self::Element>;
 
         fn new(threshold: usize) -> Self {
             Self {
@@ -424,9 +281,32 @@ cfg_montgomery! {
             }
         }
 
+        fn sub_assign(&mut self, rhs: &Self) {
+            assert_eq!(
+                self.threshold(),
+                rhs.threshold(),
+                "expected subtracted quacks to have the same threshold"
+            );
+            for (i, sum) in self.power_sums.iter_mut().enumerate() {
+                sum.sub_assign(rhs.power_sums[i]);
+            }
+            self.count = self.count.wrapping_sub(rhs.count);
+            self.last_value = None;
+        }
+
+        fn sub(self, rhs: &Self) -> Self {
+            let mut result = self;
+            result.sub_assign(rhs);
+            result
+        }
+    }
+
+    impl PowerSumQuack for PowerSumQuackU64 {
+        type ModularElement = ModularInteger<Self::Element>;
+
         fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
             if self.count() == 0 {
-                return log.to_vec();
+                vec![];
             }
             let coeffs = self.to_coeffs();
             log.iter()
@@ -456,25 +336,6 @@ cfg_montgomery! {
                 coeffs[i].mul_assign(INVERSE_TABLE_U64[i]);
             }
         }
-
-        fn sub_assign(&mut self, rhs: Self) {
-            assert_eq!(
-                self.threshold(),
-                rhs.threshold(),
-                "expected subtracted quacks to have the same threshold"
-            );
-            for (i, sum) in self.power_sums.iter_mut().enumerate() {
-                sum.sub_assign(rhs.power_sums[i]);
-            }
-            self.count = self.count.wrapping_sub(rhs.count);
-            self.last_value = None;
-        }
-
-        fn sub(self, rhs: Self) -> Self {
-            let mut result = self;
-            result.sub_assign(rhs);
-            result
-        }
     }
 }
 
@@ -487,9 +348,8 @@ cfg_power_table! {
         count: u32,
     }
 
-    impl PowerSumQuack for PowerSumQuackU16 {
+    impl Quack for PowerSumQuackU16 {
         type Element = u16;
-        type ModularElement = ModularInteger<Self::Element>;
 
         fn new(threshold: usize) -> Self {
             Self {
@@ -541,9 +401,32 @@ cfg_power_table! {
             }
         }
 
+        fn sub_assign(&mut self, rhs: &Self) {
+            assert_eq!(
+                self.threshold(),
+                rhs.threshold(),
+                "expected subtracted quacks to have the same threshold"
+            );
+            for (i, sum) in self.power_sums.iter_mut().enumerate() {
+                sum.sub_assign(rhs.power_sums[i]);
+            }
+            self.count = self.count.wrapping_sub(rhs.count);
+            self.last_value = None;
+        }
+
+        fn sub(self, rhs: &Self) -> Self {
+            let mut result = self;
+            result.sub_assign(rhs);
+            result
+        }
+    }
+
+    impl PowerSumQuack for PowerSumQuackU16 {
+        type ModularElement = ModularInteger<Self::Element>;
+
         fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
             if self.count() == 0 {
-                return log.to_vec();
+                return vec![];
             }
             assert!((self.count() as usize) <= self.threshold(), "number of elements must not exceed threshold");
             let coeffs = self.to_coeffs();
@@ -574,25 +457,6 @@ cfg_power_table! {
                 coeffs[i].sub_assign(self.power_sums[i]);
                 coeffs[i].mul_assign(INVERSE_TABLE_U16[i]);
             }
-        }
-
-        fn sub_assign(&mut self, rhs: Self) {
-            assert_eq!(
-                self.threshold(),
-                rhs.threshold(),
-                "expected subtracted quacks to have the same threshold"
-            );
-            for (i, sum) in self.power_sums.iter_mut().enumerate() {
-                sum.sub_assign(rhs.power_sums[i]);
-            }
-            self.count = self.count.wrapping_sub(rhs.count);
-            self.last_value = None;
-        }
-
-        fn sub(self, rhs: Self) -> Self {
-            let mut result = self;
-            result.sub_assign(rhs);
-            result
         }
     }
 }
@@ -692,7 +556,7 @@ mod test {
     fn test_decode_empty_u32() {
         let quack = PowerSumQuackU32::new(THRESHOLD);
         assert_eq!(quack.decode_with_log(&[]), vec![]);
-        assert_eq!(quack.decode_with_log(&[1]), vec![1]);
+        assert_eq!(quack.decode_with_log(&[1]), vec![]);
     }
 
     #[test]
@@ -783,7 +647,7 @@ mod test {
         q1.insert(4);
         q1.insert(5);
 
-        let quack = q1.clone().sub(q1);
+        let quack = q1.clone().sub(&q1);
         assert_eq!(quack.threshold(), THRESHOLD);
         assert_eq!(quack.count(), 0);
         assert_eq!(quack.last_value(), None);
@@ -806,7 +670,7 @@ mod test {
         q2.insert(1);
         q2.insert(2);
 
-        let quack = q1.sub(q2);
+        let quack = q1.sub(&q2);
         assert_eq!(quack.threshold(), THRESHOLD);
         assert_eq!(quack.count(), 3);
         assert_eq!(quack.last_value(), None);
@@ -877,7 +741,7 @@ mod test {
         q2.insert(4);
 
         // Check the result
-        let quack = q1.sub(q2);
+        let quack = q1.sub(&q2);
         let result = quack.decode_by_factorization();
         assert!(result.is_some());
         let mut result = result.unwrap();
@@ -902,7 +766,7 @@ mod test {
         q2.power_sums[0].add_assign(ModularInteger::new(1)); // mess up the power sums
 
         // Check the result
-        let quack = q1.sub(q2);
+        let quack = q1.sub(&q2);
         let result = quack.decode_by_factorization();
         assert!(result.is_none());
     }
@@ -1002,7 +866,7 @@ mod test {
     fn test_decode_empty_u16() {
         let quack = PowerSumQuackU16::new(THRESHOLD);
         assert_eq!(quack.decode_with_log(&[]), vec![]);
-        assert_eq!(quack.decode_with_log(&[1]), vec![1]);
+        assert_eq!(quack.decode_with_log(&[1]), vec![]);
     }
 
     #[test]
@@ -1097,7 +961,7 @@ mod test {
         q1.insert(4);
         q1.insert(5);
 
-        let quack = q1.clone().sub(q1);
+        let quack = q1.clone().sub(&q1);
         assert_eq!(quack.threshold(), THRESHOLD);
         assert_eq!(quack.count(), 0);
         assert_eq!(quack.last_value(), None);
@@ -1121,7 +985,7 @@ mod test {
         q2.insert(1);
         q2.insert(2);
 
-        let quack = q1.sub(q2);
+        let quack = q1.sub(&q2);
         assert_eq!(quack.threshold(), THRESHOLD);
         assert_eq!(quack.count(), 3);
         assert_eq!(quack.last_value(), None);
@@ -1224,7 +1088,7 @@ mod test {
     fn test_decode_empty_u64() {
         let quack = PowerSumQuackU64::new(THRESHOLD);
         assert_eq!(quack.decode_with_log(&[]), Vec::<u64>::new());
-        assert_eq!(quack.decode_with_log(&[1]), vec![1]);
+        assert_eq!(quack.decode_with_log(&[1]), vec![]);
     }
 
     #[test]
@@ -1319,7 +1183,7 @@ mod test {
         q1.insert(4);
         q1.insert(5);
 
-        let quack = q1.clone().sub(q1);
+        let quack = q1.clone().sub(&q1);
         assert_eq!(quack.threshold(), THRESHOLD);
         assert_eq!(quack.count(), 0);
         assert_eq!(quack.last_value(), None);
@@ -1343,7 +1207,7 @@ mod test {
         q2.insert(1);
         q2.insert(2);
 
-        let quack = q1.sub(q2);
+        let quack = q1.sub(&q2);
         assert_eq!(quack.threshold(), THRESHOLD);
         assert_eq!(quack.count(), 3);
         assert_eq!(quack.last_value(), None);
