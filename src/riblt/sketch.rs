@@ -43,7 +43,7 @@ impl Quack for IBLTQuackU32 {
     }
 
     fn insert(&mut self, t: HashType) {
-        self.count += 1;
+        self.count = self.count.wrapping_add(1);
         self.last_value = Some(t);
         let mut m = RandomMapping::new(t);
         while (m.last_index as usize) < self.sketch.len() {
@@ -57,7 +57,7 @@ impl Quack for IBLTQuackU32 {
     /// Remove an element in the quACK. Does not validate that the element
     /// had actually been inserted in the quACK.
     fn remove(&mut self, t: HashType) {
-        self.count -= 1;
+        self.count = self.count.wrapping_sub(1);
         let mut m = RandomMapping::new(t);
         while (m.last_index as usize) < self.sketch.len() {
             let idx = m.last_index as usize;
@@ -75,7 +75,7 @@ impl Quack for IBLTQuackU32 {
         if self.count < s2.count {
             panic!("too many packets in rhs quack");
         }
-        self.count -= s2.count;
+        self.count = self.count.wrapping_sub(s2.count);
 
         for i in 0..self.sketch.len() {
             self.sketch[i].count -= s2.sketch[i].count;
