@@ -118,9 +118,10 @@ pub trait Quack {
     /// ```
     fn sub_assign(&mut self, rhs: &Self);
 
-    /// Similar to [sub_assign](trait.PowerSumQuack.html#method.sub_assign)
-    /// but returns the difference as a new quACK.
-    fn sub(self, rhs: &Self) -> Self;
+    /// Returns the difference between two quACKs as a new quACK. If the
+    /// thresholds of the two quACKs differ, the new quACK has the smaller
+    /// of the two thresholds.
+    fn sub(&self, rhs: &Self) -> Self;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -186,7 +187,7 @@ impl Quack for QuackWrapper {
         }
     }
 
-    fn sub(self, rhs: &Self) -> Self {
+    fn sub(&self, rhs: &Self) -> Self {
         match self {
             QuackWrapper::PowerSum(q1) => {
                 if let QuackWrapper::PowerSum(q2) = rhs {

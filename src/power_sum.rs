@@ -157,10 +157,17 @@ impl Quack for PowerSumQuackU32 {
         self.last_value = None;
     }
 
-    fn sub(self, rhs: &Self) -> Self {
-        let mut result = self;
-        result.sub_assign(rhs);
-        result
+    fn sub(&self, rhs: &Self) -> Self {
+        let threshold = std::cmp::min(self.threshold(), rhs.threshold());
+        let power_sums = self.power_sums.iter().zip(rhs.power_sums.iter())
+            .take(threshold)
+            .map(|(lhs, rhs)| lhs.sub(*rhs))
+            .collect();
+        Self {
+            power_sums,
+            last_value: None,
+            count: self.count.wrapping_sub(rhs.count),
+        }
     }
 }
 
@@ -737,6 +744,48 @@ mod test {
     #[test]
     fn test_subtract_quacks_with_nonzero_difference_u32() {
         let mut q1 = PowerSumQuackU32::new(THRESHOLD);
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        q1.insert(4);
+        q1.insert(5);
+
+        let mut q2 = PowerSumQuackU32::new(THRESHOLD);
+        q2.insert(1);
+        q2.insert(2);
+
+        let quack = q1.sub(&q2);
+        assert_eq!(quack.threshold(), THRESHOLD);
+        assert_eq!(quack.count(), 3);
+        assert_eq!(quack.last_value(), None);
+        assert_eq!(quack.to_coeffs().len(), 3);
+        assert_eq!(quack.decode_with_log(&[1, 2, 3, 4, 5]), vec![3, 4, 5]);
+    }
+
+    #[test]
+    fn test_subtract_quacks_with_different_threshold_u32_lt() {
+        let mut q1 = PowerSumQuackU32::new(THRESHOLD);
+        q1.insert(1);
+        q1.insert(2);
+        q1.insert(3);
+        q1.insert(4);
+        q1.insert(5);
+
+        let mut q2 = PowerSumQuackU32::new(THRESHOLD + 1);
+        q2.insert(1);
+        q2.insert(2);
+
+        let quack = q1.sub(&q2);
+        assert_eq!(quack.threshold(), THRESHOLD);
+        assert_eq!(quack.count(), 3);
+        assert_eq!(quack.last_value(), None);
+        assert_eq!(quack.to_coeffs().len(), 3);
+        assert_eq!(quack.decode_with_log(&[1, 2, 3, 4, 5]), vec![3, 4, 5]);
+    }
+
+    #[test]
+    fn test_subtract_quacks_with_different_threshold_u32_gt() {
+        let mut q1 = PowerSumQuackU32::new(THRESHOLD + 1);
         q1.insert(1);
         q1.insert(2);
         q1.insert(3);

@@ -80,10 +80,17 @@ impl Quack for IBLTQuackU32 {
         }
     }
 
-    fn sub(self, s2: &Self) -> Self {
-        let mut s1 = self.clone();
-        s1.sub_assign(s2);
-        s1
+    fn sub(&self, rhs: &Self) -> Self {
+        let threshold = std::cmp::min(self.threshold(), rhs.threshold());
+        let sketch = self.sketch.iter().zip(rhs.sketch.iter())
+            .take(threshold)
+            .map(|(lhs, rhs)| lhs.clone().apply(rhs.hash, rhs.count.wrapping_neg()))
+            .collect();
+        Self {
+            sketch,
+            last_value: None,
+            count: self.count.wrapping_sub(rhs.count),
+        }
     }
 }
 
