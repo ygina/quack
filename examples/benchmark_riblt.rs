@@ -27,12 +27,12 @@ struct Cli {
     /// Quack type
     #[arg(value_enum)]
     quack_ty: QuackType,
-    /// Whether to run the encode benchmark
-    #[arg(long)]
-    encode: bool,
-    /// Whether to run the decode benchmark
-    #[arg(long)]
-    decode: bool,
+    /// Whether to run the encode benchmark, and num_symbols if provided
+    #[arg(long, value_delimiter=',', num_args=0..)]
+    encode: Option<Vec<usize>>,
+    /// Whether to run the decode benchmark, and num_errors if provided
+    #[arg(long, value_delimiter=',', num_args=0..)]
+    decode: Option<Vec<usize>>,
 }
 
 #[derive(ValueEnum, Debug, Copy, Clone)]
@@ -299,21 +299,40 @@ fn main() {
     let args = Cli::parse();
     match args.quack_ty {
         QuackType::PowerSum => {
-            quack::global_config_set_max_power_sum_threshold(
-                *NUM_SYMBOLS.last().unwrap());
-            if args.encode {
-                benchmark(args.quack_ty, benchmark_encode, NUM_SYMBOLS.as_slice());
+            quack::global_config_set_max_power_sum_threshold(u8::MAX as usize);
+            if let Some(encode) = args.encode {
+                let num_symbols = if encode.is_empty() {
+                    NUM_SYMBOLS.as_slice()
+                } else {
+                    encode.as_slice()
+                };
+                benchmark(args.quack_ty, benchmark_encode, num_symbols);
             }
-            if args.decode {
-                benchmark(args.quack_ty, benchmark_psum_decode, NUM_ERRORS.as_slice());
+            if let Some(decode) = args.decode {
+                let num_errors = if decode.is_empty() {
+                    NUM_ERRORS.as_slice()
+                } else {
+                    decode.as_slice()
+                };
+                benchmark(args.quack_ty, benchmark_psum_decode, num_errors);
             }
         }
         QuackType::IBLT => {
-            if args.encode {
-                benchmark(args.quack_ty, benchmark_encode, NUM_SYMBOLS.as_slice());
+            if let Some(encode) = args.encode {
+                let num_symbols = if encode.is_empty() {
+                    NUM_SYMBOLS.as_slice()
+                } else {
+                    encode.as_slice()
+                };
+                benchmark(args.quack_ty, benchmark_encode, num_symbols);
             }
-            if args.decode {
-                benchmark(args.quack_ty, benchmark_iblt_decode, NUM_ERRORS.as_slice());
+            if let Some(decode) = args.decode {
+                let num_errors = if decode.is_empty() {
+                    NUM_ERRORS.as_slice()
+                } else {
+                    decode.as_slice()
+                };
+                benchmark(args.quack_ty, benchmark_iblt_decode, num_errors);
             }
         }
     }
