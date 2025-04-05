@@ -102,8 +102,8 @@ of the rateless IBLT and our power sum quACK [here](https://github.com/ygina/sub
 
 ```
 cargo build --release --example benchmark_riblt
-./target/release/examples/benchmark_riblt power-sum --encode --decode
-./target/release/examples/benchmark_riblt riblt --encode --decode
+./target/release/examples/benchmark_riblt power-sum --encode 10,20,40,80,160,200,240,280 --decode 1,2,4,8,16,20,40,80,160,255
+./target/release/examples/benchmark_riblt riblt --encode 10,20,40,80,160,200,240,280 --decode 1,2,4,8,16,20,40,80,160,255
 ```
 
 ## C Bindings

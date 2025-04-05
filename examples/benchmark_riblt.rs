@@ -7,7 +7,7 @@ use quack::{PowerSumQuack, PowerSumQuackU32, Quack, IBLTQuackU32, QuackWrapper};
 // are 4 bytes for the packet count, and 4 bytes for the last inserted value.
 // Each coded symbol is 5 bytes (4-byte identifier and 1-byte count), leaving
 // generously at most (1458-8)/5 = 290 source symbols at most.
-const NUM_SYMBOLS: [usize; 8] = [
+const _NUM_SYMBOLS: [usize; 8] = [
     10, 20, 40, 80, 160, 200, 240, 280,
 ];
 
@@ -15,7 +15,7 @@ const NUM_SYMBOLS: [usize; 8] = [
 // a theoretical bound---so the 290 source symbols is also an upper bound on
 // the number of errors. Hence, we use 1 byte for the coded symbol count which
 // is slightly less than 290.
-const NUM_ERRORS: [usize; 10] = [
+const _NUM_ERRORS: [usize; 10] = [
     1, 2, 4, 8, 16, 20, 40, 80, 160, u8::MAX as usize,
 ];
 
@@ -297,12 +297,13 @@ fn main() {
         env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Cli::parse();
+    let default_inputs = (1..(u8::MAX as usize)).collect::<Vec<_>>();
     match args.quack_ty {
         QuackType::PowerSum => {
             quack::global_config_set_max_power_sum_threshold(u8::MAX as usize);
             if let Some(encode) = args.encode {
                 let num_symbols = if encode.is_empty() {
-                    NUM_SYMBOLS.as_slice()
+                    default_inputs.as_slice()
                 } else {
                     encode.as_slice()
                 };
@@ -310,7 +311,7 @@ fn main() {
             }
             if let Some(decode) = args.decode {
                 let num_errors = if decode.is_empty() {
-                    NUM_ERRORS.as_slice()
+                    default_inputs.as_slice()
                 } else {
                     decode.as_slice()
                 };
@@ -320,7 +321,7 @@ fn main() {
         QuackType::IBLT => {
             if let Some(encode) = args.encode {
                 let num_symbols = if encode.is_empty() {
-                    NUM_SYMBOLS.as_slice()
+                    default_inputs.as_slice()
                 } else {
                     encode.as_slice()
                 };
@@ -328,7 +329,7 @@ fn main() {
             }
             if let Some(decode) = args.decode {
                 let num_errors = if decode.is_empty() {
-                    NUM_ERRORS.as_slice()
+                    default_inputs.as_slice()
                 } else {
                     decode.as_slice()
                 };
