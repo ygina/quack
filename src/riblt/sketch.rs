@@ -117,10 +117,17 @@ impl IBLTQuackU32 {
         n + 8
     }
 
-    pub fn serialize_with_hint(&self, buf: &mut [u8], num_symbols: usize) -> usize {
+    pub fn serialize_with_hint(&self, buf: &mut [u8], num_missing: usize) -> usize {
         buf[0..4].copy_from_slice(&self.count.to_le_bytes());
         buf[4..8].copy_from_slice(&self.last_value.unwrap().to_le_bytes());
-        let num_symbols = std::cmp::min(self.sketch.len(), num_symbols);
+        let num_symbols = std::cmp::min(
+            self.sketch.len(),
+            if num_missing == 1 {
+                num_missing
+            } else {
+                4 * num_missing
+            },
+        );
         let n = std::mem::size_of::<CodedSymbol>() * num_symbols;
         let src = self.sketch.as_ptr() as *const u8;
         let dst = (&mut buf[8..]).as_mut_ptr();
@@ -205,14 +212,20 @@ mod test{
         let mut q1 = IBLTQuackU32::new(10);
         q1.insert(1);
         q1.insert(2);
-        q1.insert(3);
-        let num_symbols = 3;
-        let len = q1.serialize_with_hint(&mut buf, num_symbols);
-        assert_eq!(len, 8+5*num_symbols);
+
+        // Test number of symbols based on number missing
+        assert_eq!(q1.serialize_with_hint(&mut buf, 0), 8+5*0);
+        assert_eq!(q1.serialize_with_hint(&mut buf, 1), 8+5*1);
+        assert_eq!(q1.serialize_with_hint(&mut buf, 2), 8+5*2*4);
+        assert_eq!(q1.serialize_with_hint(&mut buf, 3), 8+5*10);
+
+        // Serialize, deserialize, and decode
+        let num_missing = 2;
+        let len = q1.serialize_with_hint(&mut buf, num_missing);
         let q2 = IBLTQuackU32::deserialize(&buf[..len]);
         assert_eq!(q1.count(), q2.count());
         assert_eq!(q1.last_value(), q2.last_value());
         assert_eq!(q1.sketch.len(), 10);
-        assert_eq!(q2.sketch.len(), num_symbols);
+        assert_eq!(q2.sketch.len(), 2*4);
     }
 }

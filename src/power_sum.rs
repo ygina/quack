@@ -221,10 +221,10 @@ impl PowerSumQuackU32 {
         n + 8
     }
 
-    pub fn serialize_with_hint(&self, buf: &mut [u8], num_symbols: usize) -> usize {
+    pub fn serialize_with_hint(&self, buf: &mut [u8], num_missing: usize) -> usize {
         buf[0..4].copy_from_slice(&self.count.to_le_bytes());
         buf[4..8].copy_from_slice(&self.last_value.unwrap().value().to_le_bytes());
-        let num_symbols = std::cmp::min(self.power_sums.len(), num_symbols);
+        let num_symbols = std::cmp::min(self.power_sums.len(), num_missing);
         let n = std::mem::size_of::<ModularInteger<u32>>() * num_symbols;
         let src = self.power_sums.as_ptr() as *const u8;
         let dst = (&mut buf[8..]).as_mut_ptr();

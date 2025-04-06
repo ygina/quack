@@ -328,9 +328,9 @@ mod test {
         q1.insert(3);
 
         // serialize
-        let num_symbols = 3; // the hint
-        let len = q1.serialize_with_hint(&mut buf, num_symbols);
-        assert_eq!(len, 9+4*num_symbols);
+        let num_missing = 3; // the hint
+        let len = q1.serialize_with_hint(&mut buf, num_missing);
+        assert_eq!(len, 9+4*num_missing);
 
         // deserialize
         let q2 = QuackWrapper::deserialize(&buf[..len]);
@@ -345,12 +345,11 @@ mod test {
         let mut q1 = QuackWrapper::IBLT(IBLTQuackU32::new(10));
         q1.insert(1);
         q1.insert(2);
-        q1.insert(3);
 
         // serialize
-        let num_symbols = 3; // the hint
-        let len = q1.serialize_with_hint(&mut buf, num_symbols);
-        assert_eq!(len, 9+5*num_symbols);
+        let num_missing = 2; // the hint
+        let len = q1.serialize_with_hint(&mut buf, num_missing);
+        assert_eq!(len, 9+5*num_missing*4);
 
         // deserialize
         let q2 = QuackWrapper::deserialize(&buf[..len]);
