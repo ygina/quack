@@ -1,6 +1,7 @@
 use super::HashType;
 use super::symbol::{CodedSymbol, Direction, REMOVE};
 use super::mapping::RandomMapping;
+use log::error;
 
 // Decoder computes the symmetric difference between two sets A, B. The Decoder
 // knows B (the local set) and expects coded symbols for A (the remote set).
@@ -116,7 +117,9 @@ impl Decoder {
             } else {
                 // a decodable symbol does not turn undecodable, so its degree
                 // must be -1, 0, or 1
-                panic!("invalid degree for decodable coded symbol");
+                error!("invalid degree for decodable coded symbol {} {:?} {}/{}",
+                    c.count, self.cs, self.decoded, self.cs.len());
+                return;
             }
             didx += 1;
         }
