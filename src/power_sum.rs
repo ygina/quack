@@ -249,6 +249,21 @@ impl PowerSumQuackU32 {
             power_sums,
         }
     }
+
+    pub fn deserialize_prealloc(&mut self, buf: &[u8]) {
+        let n = (buf.len() - 8) / std::mem::size_of::<ModularInteger<u32>>();
+        if self.power_sums.len() != n {
+            *self = Self::deserialize(buf);
+            return;
+        }
+        let src: *const ModularInteger<u32> = (&buf[8..]).as_ptr() as _;
+        let dst: *mut ModularInteger<u32> = self.power_sums.as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        self.count = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+        self.last_value = Some(ModularInteger::new(u32::from_le_bytes(buf[4..8].try_into().unwrap())));
+    }
 }
 
 cfg_libpari! {
@@ -687,6 +702,12 @@ mod test {
         assert_eq!(q1.count(), q2.count());
         assert_eq!(q1.last_value(), q2.last_value());
         assert_eq!(q1.to_coeffs(), q2.to_coeffs());
+
+        let mut q3 = PowerSumQuackU32::new(10);
+        q3.deserialize_prealloc(&buf[..len]);
+        assert_eq!(q3.count(), q2.count());
+        assert_eq!(q3.last_value(), q2.last_value());
+        assert_eq!(q3.to_coeffs(), q2.to_coeffs());
     }
 
     #[test]

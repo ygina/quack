@@ -256,6 +256,32 @@ impl QuackWrapper {
             _ => panic!("invalid quack type")
         }
     }
+
+    // Updates Self if possible instead of allocating a new QuackWrapper.
+    pub fn deserialize_prealloc(&mut self, buf: &[u8]) {
+        match buf[0] {
+            0 => {
+                match self {
+                    QuackWrapper::PowerSum(quack) => {
+                        quack.deserialize_prealloc(&buf[1..]);
+                    }
+                    QuackWrapper::IBLT(_) => {
+                        *self = QuackWrapper::PowerSum(PowerSumQuackU32::deserialize(&buf[1..]));
+                    }
+                }
+            }
+            1 => match self {
+                QuackWrapper::IBLT(quack) => {
+                    quack.deserialize_prealloc(&buf[1..]);
+                    *self = QuackWrapper::IBLT(IBLTQuackU32::deserialize(&buf[1..]));
+                }
+                QuackWrapper::PowerSum(_) => {
+                    *self = QuackWrapper::IBLT(IBLTQuackU32::deserialize(&buf[1..]));
+                }
+            }
+            _ => panic!("invalid quack type")
+        }
+    }
 }
 
 mod power_sum;

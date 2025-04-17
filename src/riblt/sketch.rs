@@ -153,6 +153,21 @@ impl IBLTQuackU32 {
             sketch,
         }
     }
+
+    pub fn deserialize_prealloc(&mut self, buf: &[u8]) {
+        let n = (buf.len() - 8) / std::mem::size_of::<CodedSymbol>();
+        if self.sketch.len() != n {
+            *self = Self::deserialize(buf);
+            return;
+        }
+        let src = (&buf[8..]).as_ptr() as *const CodedSymbol;
+        let dst = self.sketch.as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, n);
+        }
+        self.count = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+        self.last_value = Some(u32::from_le_bytes(buf[4..8].try_into().unwrap()));
+    }
 }
 
 #[cfg(test)]
@@ -204,6 +219,12 @@ mod test{
         assert_eq!(q1.count(), q2.count());
         assert_eq!(q1.last_value(), q2.last_value());
         assert_eq!(q1.sketch, q2.sketch);
+
+        let mut q3 = IBLTQuackU32::new(10);
+        q3.deserialize_prealloc(&buf[..len]);
+        assert_eq!(q3.count(), q2.count());
+        assert_eq!(q3.last_value(), q2.last_value());
+        assert_eq!(q3.sketch, q2.sketch);
     }
 
     #[test]
