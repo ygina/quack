@@ -96,7 +96,7 @@ pub extern "C" fn quack_coeffs_eval(coeffs: *mut CoefficientVectorU32, x: u32) -
     debug_assert!(!coeffs.is_null());
     let coeffs = unsafe { Box::from_raw(coeffs) };
     let result = eval(&coeffs, x);
-    Box::into_raw(Box::new(coeffs));
+    let _ = Box::into_raw(Box::new(coeffs));
     result.value()
 }
 

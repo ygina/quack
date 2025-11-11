@@ -12,7 +12,7 @@ pub struct ModularInteger<T> {
 }
 
 /// Arithmetic operations and other properties of the modular integer field.
-pub trait ModularArithmetic {
+pub trait ModularArithmetic: Clone {
     /// The smallest unsigned integer type that fits elements in the field.
     type SmallModulusType;
 
@@ -66,12 +66,12 @@ pub trait ModularArithmetic {
     }
 
     /// Performs the `-` operation in the finite field.
-    fn sub(self, rhs: Self) -> Self
+    fn sub(&self, rhs: &Self) -> Self
     where
         Self: Sized,
     {
-        let mut result = self;
-        result.sub_assign(rhs);
+        let mut result = self.clone();
+        result.sub_assign(rhs.clone());
         result
     }
 

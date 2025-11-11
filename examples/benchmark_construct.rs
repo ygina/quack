@@ -183,13 +183,13 @@ fn benchmark_strawman2(num_packets: usize) -> (Duration, u64) {
     (duration, cycles)
 }
 
-fn benchmark<T: PowerSumQuack + Serialize>(
+fn benchmark<T: PowerSumQuack + Quack + Serialize>(
     mut quack: T,
     name: &str,
     num_packets: usize,
 ) -> (Duration, u64)
 where
-    Standard: Distribution<<T as PowerSumQuack>::Element>,
+    Standard: Distribution<<T as Quack>::Element>,
 {
     let numbers = gen_numbers(num_packets);
 
