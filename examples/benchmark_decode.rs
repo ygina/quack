@@ -211,7 +211,7 @@ fn benchmark_factor_u32(threshold: usize, num_packets: usize, num_drop: usize) -
     for &number in numbers.iter().take(num_packets) {
         acc1.insert(number);
     }
-    acc1.sub_assign(acc2);
+    acc1.sub_assign(&acc2);
     let dropped = acc1.decode_by_factorization().unwrap();
     let (duration, cycles) = t.stop();
     info!(
@@ -227,7 +227,7 @@ fn benchmark_factor_u32(threshold: usize, num_packets: usize, num_drop: usize) -
     (duration, cycles)
 }
 
-fn benchmark<T: PowerSumQuack>(
+fn benchmark<T: PowerSumQuack + Quack>(
     mut acc1: T,
     mut acc2: T,
     name: &str,
@@ -235,8 +235,8 @@ fn benchmark<T: PowerSumQuack>(
     num_drop: usize,
 ) -> (Duration, u64)
 where
-    Standard: Distribution<<T as PowerSumQuack>::Element>,
-    <T as PowerSumQuack>::Element: Copy,
+    Standard: Distribution<<T as Quack>::Element>,
+    <T as Quack>::Element: Copy,
 {
     let numbers = gen_numbers(num_packets);
 
@@ -249,7 +249,7 @@ where
     for &number in numbers.iter().take(num_packets) {
         acc1.insert(number);
     }
-    acc1.sub_assign(acc2);
+    acc1.sub_assign(&acc2);
     let dropped = acc1.decode_with_log(&numbers);
     let (duration, cycles) = t.stop();
     info!(

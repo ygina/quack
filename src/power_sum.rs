@@ -3,7 +3,7 @@ use crate::precompute::INVERSE_TABLE_U32;
 use crate::Quack;
 use std::fmt::Debug;
 
-#[cfg(any(feature = "power_table", feature = "montgomery", doc))]
+// #[cfg(any(feature = "power_table", feature = "montgomery", doc))]
 use serde::{Deserialize, Serialize};
 
 cfg_power_table! {
@@ -15,7 +15,8 @@ cfg_montgomery! {
 }
 
 /// 32-bit power sum quACK.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// NOTE: Serialize/Deserialize used for benchmarks
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PowerSumQuackU32 {
     power_sums: Vec<ModularInteger<u32>>,
     last_value: Option<ModularInteger<u32>>,
@@ -161,7 +162,7 @@ impl Quack for PowerSumQuackU32 {
         let threshold = std::cmp::min(self.threshold(), rhs.threshold());
         let power_sums = self.power_sums.iter().zip(rhs.power_sums.iter())
             .take(threshold)
-            .map(|(lhs, rhs)| lhs.sub(*rhs))
+            .map(|(lhs, rhs)| lhs.sub(rhs))
             .collect();
         Self {
             power_sums,
@@ -189,7 +190,7 @@ impl PowerSumQuack for PowerSumQuackU32 {
         coeffs[0] = self.power_sums[0].neg();
         for i in 1..coeffs.len() {
             for j in 0..i {
-                coeffs[i] = coeffs[i].sub(self.power_sums[j].mul(coeffs[i - j - 1]));
+                coeffs[i] = coeffs[i].sub(&self.power_sums[j].mul(coeffs[i - j - 1]));
             }
             coeffs[i].sub_assign(self.power_sums[i]);
             coeffs[i].mul_assign(INVERSE_TABLE_U32[i]);
@@ -361,8 +362,8 @@ cfg_montgomery! {
             self.last_value = None;
         }
 
-        fn sub(self, rhs: &Self) -> Self {
-            let mut result = self;
+        fn sub(&self, rhs: &Self) -> Self {
+            let mut result = self.clone();
             result.sub_assign(rhs);
             result
         }
@@ -373,7 +374,7 @@ cfg_montgomery! {
 
         fn decode_with_log(&self, log: &[Self::Element]) -> Vec<Self::Element> {
             if self.count() == 0 {
-                vec![];
+                return Vec::<Self::Element>::new();
             }
             let coeffs = self.to_coeffs();
             log.iter()
@@ -397,7 +398,7 @@ cfg_montgomery! {
             coeffs[0] = self.power_sums[0].neg();
             for i in 1..coeffs.len() {
                 for j in 0..i {
-                    coeffs[i] = coeffs[i].sub(self.power_sums[j].mul(coeffs[i - j - 1]));
+                    coeffs[i] = coeffs[i].sub(&self.power_sums[j].mul(coeffs[i - j - 1]));
                 }
                 coeffs[i].sub_assign(self.power_sums[i]);
                 coeffs[i].mul_assign(INVERSE_TABLE_U64[i]);
@@ -481,8 +482,8 @@ cfg_power_table! {
             self.last_value = None;
         }
 
-        fn sub(self, rhs: &Self) -> Self {
-            let mut result = self;
+        fn sub(&self, rhs: &Self) -> Self {
+            let mut result = self.clone();
             result.sub_assign(rhs);
             result
         }
@@ -519,7 +520,7 @@ cfg_power_table! {
             coeffs[0] = self.power_sums[0].neg();
             for i in 1..coeffs.len() {
                 for j in 0..i {
-                    coeffs[i] = coeffs[i].sub(self.power_sums[j].mul(coeffs[i - j - 1]));
+                    coeffs[i] = coeffs[i].sub(&self.power_sums[j].mul(coeffs[i - j - 1]));
                 }
                 coeffs[i].sub_assign(self.power_sums[i]);
                 coeffs[i].mul_assign(INVERSE_TABLE_U16[i]);

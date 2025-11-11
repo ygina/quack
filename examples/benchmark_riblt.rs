@@ -38,7 +38,7 @@ struct Cli {
 #[derive(ValueEnum, Debug, Copy, Clone)]
 enum QuackType {
     PowerSum,
-    IBLT,
+    RIBLT,
 }
 
 trait BenchmarkResult {
@@ -132,7 +132,7 @@ fn benchmark_encode(
     // Setup the benchmark
     let mut q = match quack_ty {
         QuackType::PowerSum => QuackWrapper::new(num_symbols, false),
-        QuackType::IBLT => QuackWrapper::new(num_symbols, true),
+        QuackType::RIBLT => QuackWrapper::new(num_symbols, true),
     };
 
     // Benchmark encoding
@@ -318,7 +318,7 @@ fn main() {
                 benchmark(args.quack_ty, benchmark_psum_decode, num_errors);
             }
         }
-        QuackType::IBLT => {
+        QuackType::RIBLT => {
             if let Some(encode) = args.encode {
                 let num_symbols = if encode.is_empty() {
                     default_inputs.as_slice()

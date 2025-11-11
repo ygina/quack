@@ -69,7 +69,7 @@ impl Quack for PowerTableQuack {
         }
     }
 
-    fn sub_assign(&mut self, rhs: Self) {
+    fn sub_assign(&mut self, rhs: &Self) {
         assert_eq!(
             self.threshold(),
             rhs.threshold(),
@@ -82,8 +82,8 @@ impl Quack for PowerTableQuack {
         self.last_value = None;
     }
 
-    fn sub(self, rhs: Self) -> Self {
-        let mut result = self;
+    fn sub(&self, rhs: &Self) -> Self {
+        let mut result = self.clone();
         result.sub_assign(rhs);
         result
     }
@@ -118,7 +118,7 @@ impl PowerSumQuack for PowerTableQuack {
         coeffs[0] = self.power_sums[0].neg();
         for i in 1..coeffs.len() {
             for j in 0..i {
-                coeffs[i] = coeffs[i].sub(self.power_sums[j].mul(coeffs[i - j - 1]));
+                coeffs[i] = coeffs[i].sub(&self.power_sums[j].mul(coeffs[i - j - 1]));
             }
             coeffs[i].sub_assign(self.power_sums[i]);
             coeffs[i].mul_assign(INVERSE_TABLE_U16[i]);
