@@ -3,7 +3,7 @@ use crate::precompute::INVERSE_TABLE_U32;
 use crate::Quack;
 use std::fmt::Debug;
 
-#[cfg(any(feature = "power_table", feature = "montgomery", doc))]
+// #[cfg(any(feature = "power_table", feature = "montgomery", doc))]
 use serde::{Deserialize, Serialize};
 
 cfg_power_table! {
