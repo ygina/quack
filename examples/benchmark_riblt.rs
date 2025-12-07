@@ -1,6 +1,7 @@
 use std::time::{Instant, Duration};
 use clap::{Parser, ValueEnum};
 use quack::{PowerSumQuack, PowerSumQuackU32, Quack, IBLTQuackU32, QuackWrapper};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Since a single quACK needs to fit in a packet MTU, for a 1500-byte MTU and
 // 42-byte UDP header payload offset, we have a 1458-byte UDP payload. There
@@ -19,6 +20,11 @@ const _NUM_ERRORS: [usize; 10] = [
     1, 2, 4, 8, 16, 20, 40, 80, 160, u8::MAX as usize,
 ];
 
+// To accurately evaluate the power sum decoding performance,
+// we need the total number of packets currently in the cache
+// (use a loss percentage to calculate it).
+static LOSS_PCT_DECODE: AtomicUsize = AtomicUsize::new(2);
+
 const BUFFER_SIZE: usize = 1500;
 const TARGET_DURATION_MS: u64 = 100;
 
@@ -33,6 +39,9 @@ struct Cli {
     /// Whether to run the decode benchmark, and num_errors if provided
     #[arg(long, value_delimiter=',', num_args=0..)]
     decode: Option<Vec<usize>>,
+    /// Loss percentage for paramaterizing power sum decode benchmark
+    #[arg(long)]
+    loss_pct: Option<usize>,
 }
 
 #[derive(ValueEnum, Debug, Copy, Clone)]
@@ -155,11 +164,12 @@ fn benchmark_encode(
 fn benchmark_psum_decode(quack_ty: QuackType, num_errors: usize, num_iters: usize) -> Box<dyn BenchmarkResult> {
     // Initialize the result
     let mut result = DecodeBenchmarkResult::new(quack_ty);
-    // Power sum decoding is actually proportional to num_shared, unlike RIBLT,
-    // since we plug candidate ids into the polynomial. 49x is like 2% loss.
-    let num_shared = 49 * num_errors;
+    // Power sum decoding is actually proportional to number of elements,
+    // unlike rIBLT, since we plug candidate ids into the polynomial.
+    let loss = (LOSS_PCT_DECODE.load(Ordering::SeqCst) as f64) / 100.0;
+    let num_ids = ((num_errors as f64) / loss).ceil() as usize;
+    let num_shared = num_ids - num_errors;
     let num_symbols = num_errors;
-    let num_ids = num_shared + num_errors;
 
     // Benchmark decoding
     let mut next_id = 0;
@@ -315,6 +325,9 @@ fn main() {
                 } else {
                     decode.as_slice()
                 };
+                if let Some(loss_pct) = args.loss_pct {
+                    LOSS_PCT_DECODE.store(loss_pct, Ordering::SeqCst);
+                }
                 benchmark(args.quack_ty, benchmark_psum_decode, num_errors);
             }
         }
